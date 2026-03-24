@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petal Rush 🌸</title>
+<!--
+=== SUPABASE SQL SCHEMA (run in Supabase SQL Editor) ===
+
+-- Enable UUID
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- USERS
+CREATE TABLE users (
+  uid UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  phone TEXT,
+  role TEXT CHECK (role IN ('buyer','seller','delivery','admin')) NOT NULL,
+  status TEXT DEFAULT 'active',
+  addresses JSONB DEFAULT '[]',
+  bank JSONB DEFAULT '{}',
+  vehicle JSONB DEFAULT '{}',
+  store JSONB DEFAULT '{}',
+  photo_url TEXT,
+  alt_contacts JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PRODUCTS
+CREATE TABLE products (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  seller_id UUID REFERENCES users(uid),
+  seller_name TEXT,
+  store_name TEXT,
+  name TEXT NOT NULL,
+  category TEXT DEFAULT 'roses',
+  price INTEGER NOT NULL,
+  stock INTEGER DEFAULT 0,
+  emoji TEXT DEFAULT '🌸',
+  description TEXT,
+  rating NUMERIC DEFAULT 0,
+  city TEXT,
+  images JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ORDERS
+CREATE TABLE orders (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES users(uid),
+  user_name TEXT,
+  seller_id UUID REFERENCES users(uid),
+  seller_name TEXT,
+  delivery_partner_id UUID REFERENCES users(uid),
+  delivery_partner_name TEXT,
+  products JSONB NOT NULL,
+  total_amount INTEGER NOT NULL,
+  status TEXT DEFAULT 'pending',
+  payment_mode TEXT DEFAULT 'UPI',
+  address JSONB DEFAULT '{}',
+  delivery_code TEXT,
+  pickup_code TEXT,
+  seller_share INTEGER,
+  delivery_share INTEGER,
+  admin_commission INTEGER,
+  estimated_delivery TIMESTAMPTZ,
+  confirmed_at TIMESTAMPTZ,
+  accepted_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PAYMENTS
+CREATE TABLE payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  order_id TEXT REFERENCES orders(id),
+  total_amount INTEGER,
+  seller_share INTEGER,
+  delivery_share INTEGER,
+  admin_commission INTEGER,
+  status TEXT DEFAULT 'pending',
+  seller_id UUID REFERENCES users(uid),
+  delivery_partner_id UUID REFERENCES users(uid),
+  released_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- REVIEWS
+CREATE TABLE reviews (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(uid),
+  user_name TEXT,
+  order_id TEXT REFERENCES orders(id),
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policies
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read products" ON products FOR SELECT USING (true);
+CREATE POLICY "Sellers manage own products" ON products FOR ALL USING (auth.uid()=seller_id);
+CREATE POLICY "Users read own orders" ON orders FOR SELECT USING (auth.uid()=user_id OR auth.uid()=seller_id OR auth.uid()=delivery_partner_id);
+CREATE POLICY "Users read own profile" ON users FOR SELECT USING (auth.uid()=uid);
+CREATE POLICY "Users update own profile" ON users FOR UPDATE USING (auth.uid()=uid);
+
+-- Indexes
+CREATE INDEX idx_products_seller ON products(seller_id);
+CREATE INDEX idx_orders_user ON orders(user_id);
+CREATE INDEX idx_orders_seller ON orders(seller_id);
+CREATE INDEX idx_orders_delivery ON orders(delivery_partner_id);
+CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_payments_order ON payments(order_id);
+
+-->
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#fef7f7;--bg2:#fff;--bg3:#fff5f5;--tx:#1a1a2e;--tx2:#555;--tx3:#888;--pr:#e84393;--pl:#ffeef8;--ac:#6c5ce7;--ok:#00b894;--wn:#fdcb6e;--er:#d63031;--in:#0984e3;--bd:#f0d0d8;--sh:0 2px 12px rgba(232,67,147,.08);--r:14px;--rs:8px;--sw:240px;--th:56px}
+.dark{--bg:#0f0a1a;--bg2:#1a1128;--bg3:#221738;--tx:#f0e6ff;--tx2:#bba8d0;--tx3:#8875a0;--pl:#2d1525;--bd:#3d2a50;--sh:0 2px 12px rgba(0,0,0,.3)}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;transition:.3s}
+button{cursor:pointer;font-family:inherit;border:none;outline:none}
+input,select,textarea{font-family:inherit;font-size:.92rem;padding:9px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);background:var(--bg2);color:var(--tx);width:100%}
+input:focus,select:focus{border-color:var(--pr)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:9px 20px;border-radius:50px;font-weight:600;font-size:.88rem;transition:.2s}
+.btn-p{background:linear-gradient(135deg,var(--pr),var(--ac));color:#fff}
+.btn-o{background:transparent;border:2px solid var(--pr);color:var(--pr)}
+.btn-s{padding:5px 12px;font-size:.8rem}
+.btn-ok{background:var(--ok);color:#fff}
+.btn-er{background:var(--er);color:#fff}
+.btn-g{background:transparent;color:var(--tx2);padding:5px 8px}
+.bg{display:inline-block;padding:2px 9px;border-radius:50px;font-size:.72rem;font-weight:600}
+.bg-ok{background:#d4edda;color:#155724}.dark .bg-ok{background:#0a3622;color:#7ddf9e}
+.bg-wn{background:#fff3cd;color:#856404}.dark .bg-wn{background:#3d2e00;color:#ffc107}
+.bg-er{background:#f8d7da;color:#721c24}.dark .bg-er{background:#3d0a0e;color:#f09298}
+.bg-in{background:#d1ecf1;color:#0c5460}.dark .bg-in{background:#0a2e38;color:#6dd5ed}
+.bg-pr{background:var(--pl);color:var(--pr)}
+.scr{display:none;min-height:100vh}.scr.on{display:block}
+.lnav{display:flex;align-items:center;justify-content:space-between;padding:14px 5%;max-width:1200px;margin:0 auto}
+.logo{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,var(--pr),var(--ac));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero{text-align:center;padding:50px 5% 30px;max-width:800px;margin:0 auto}
+.hero h1{font-size:clamp(1.8rem,5vw,3rem);margin-bottom:14px;line-height:1.2}
+.hero h1 span{background:linear-gradient(135deg,var(--pr),var(--ac));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:var(--tx2);margin-bottom:24px}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;padding:20px 5%;max-width:1000px;margin:0 auto}
+.rcard{background:var(--bg2);border:2px solid var(--bd);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:.2s}
+.rcard:hover{border-color:var(--pr);transform:translateY(-2px)}
+.rcard h3{font-size:1rem;margin-top:4px}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;padding:30px 5%;max-width:1000px;margin:0 auto}
+.fcard{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:20px;text-align:center}
+.fcard .ic{font-size:2rem;margin-bottom:8px}
+.footer{text-align:center;padding:20px;color:var(--tx3);font-size:.8rem;border-top:1px solid var(--bd);margin-top:30px}
+#auth{display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,var(--pl),var(--bg))}
+.abox{background:var(--bg2);border-radius:var(--r);padding:28px;width:100%;max-width:400px;box-shadow:var(--sh)}
+.atabs{display:flex;background:var(--bg3);border-radius:8px;padding:3px;margin-bottom:16px}
+.atab{flex:1;padding:8px;text-align:center;border-radius:6px;font-weight:600;font-size:.88rem;background:transparent;color:var(--tx2)}
+.atab.on{background:var(--bg2);color:var(--pr)}
+.fg{margin-bottom:12px}
+.rsel{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px}
+.ropt{padding:10px 4px;text-align:center;border:2px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.8rem;font-weight:600}
+.ropt.on{border-color:var(--pr);background:var(--pl);color:var(--pr)}
+.aerr{background:#fee;color:var(--er);padding:7px;border-radius:var(--rs);font-size:.82rem;margin-bottom:10px;display:none}
+.sb{width:var(--sw);background:var(--bg2);border-right:1px solid var(--bd);position:fixed;top:0;left:0;bottom:0;z-index:100;transform:translateX(-100%);transition:.3s;overflow-y:auto;padding-top:8px}
+.sb.open{transform:translateX(0)}
+.sbo{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:99;display:none}
+.sb.open~.sbo{display:block}
+.sbh{padding:14px 16px;border-bottom:1px solid var(--bd);margin-bottom:6px}
+.ni{display:flex;align-items:center;gap:8px;padding:10px 16px;color:var(--tx2);cursor:pointer;font-size:.88rem;border-left:3px solid transparent}
+.ni:hover,.ni.on{background:var(--pl);color:var(--pr);border-left-color:var(--pr)}
+.tb{position:fixed;top:0;right:0;left:0;height:var(--th);background:var(--bg2);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 14px;z-index:90;gap:8px}
+.tbm{font-size:1.3rem;background:none;color:var(--tx)}
+.tbt{flex:1;font-weight:700;font-size:1rem}
+.mc{margin-top:var(--th);padding:16px;padding-bottom:74px;min-height:calc(100vh - var(--th))}
+.bn{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--bd);display:flex;z-index:90}
+.bi{flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 0;font-size:.66rem;color:var(--tx3);cursor:pointer}
+.bi.on{color:var(--pr)}
+.bi span:first-child{font-size:1.2rem}
+.pg{display:none}.pg.on{display:block}
+.sg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+.sc{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:14px;text-align:center}
+.sc .v{font-size:1.4rem;font-weight:700}
+.sc .l{font-size:.75rem;color:var(--tx2);margin-top:2px}
+.cd{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.pc{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.pimg{height:110px;display:flex;align-items:center;justify-content:center;font-size:3.5rem;background:var(--bg3)}
+.pb{padding:10px}
+.pn{font-weight:700;font-size:.9rem}
+.pp{color:var(--pr);font-weight:700;font-size:1rem;margin:6px 0}
+.cp{position:fixed;top:0;right:-360px;width:340px;max-width:90vw;height:100vh;background:var(--bg2);border-left:1px solid var(--bd);z-index:200;transition:.3s;display:flex;flex-direction:column}
+.cp.open{right:0}
+.co{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:199;display:none}
+.co.open{display:block}
+.ci{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.oc{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.prg{display:flex;gap:3px;margin:8px 0}
+.prg .st{flex:1;height:4px;border-radius:3px;background:var(--bd)}
+.prg .st.dn{background:var(--ok)}
+.prg .st.cr{background:var(--pr)}
+.dc{background:var(--bg3);border:2px dashed var(--pr);border-radius:var(--rs);padding:8px;text-align:center;margin:8px 0}
+.dc .code{font-size:1.4rem;font-weight:800;letter-spacing:4px;color:var(--pr);font-family:monospace}
+.md{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px}
+.md.open{display:flex}
+.mdo{position:absolute;inset:0;background:rgba(0,0,0,.4)}
+.mdc{position:relative;background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto}
+.mdx{position:absolute;top:8px;right:12px;font-size:1.3rem;background:none;color:var(--tx3);cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd);font-size:.82rem}
+th{background:var(--bg3);font-weight:600;color:var(--tx2)}
+.dt{width:40px;height:22px;border-radius:50px;background:var(--bd);position:relative;cursor:pointer}
+.dt::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+.dark .dt{background:var(--pr)}.dark .dt::after{transform:translateX(18px)}
+.tc{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:10px 18px;border-radius:var(--rs);color:#fff;font-size:.85rem;animation:si .3s;background:var(--ok)}
+.toast.err{background:var(--er)}.toast.inf{background:var(--in)}
+@keyframes si{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.ec{background:linear-gradient(135deg,var(--pr),var(--ac));color:#fff;border-radius:var(--r);padding:20px;text-align:center;margin-bottom:16px}
+.ec .ev{font-size:1.8rem;font-weight:800}
+.si{display:flex;gap:4px;margin-bottom:8px}
+.si button{font-size:1.4rem;background:none;color:var(--bd)}
+.si button.fl{color:#f1c40f}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.split{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:10px 0}
+.spb{background:var(--bg3);border-radius:var(--rs);padding:8px;text-align:center}
+.spb .sv{font-weight:700}.spb .sl{font-size:.7rem;color:var(--tx3)}
+@media(min-width:769px){.sb{transform:translateX(0)!important}.sbo{display:none!important}.mc{margin-left:var(--sw)}.tb{left:var(--sw)}.bn{display:none}.tbm{display:none}}
+@media(max-width:768px){.mc{padding:12px;padding-bottom:68px}.pgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.sg{grid-template-columns:repeat(2,1fr)}.fr{grid-template-columns:1fr}.feat{grid-template-columns:1fr 1fr}}
+@media(max-width:400px){.pgrid{grid-template-columns:1fr}.feat{grid-template-columns:1fr}.rsel{grid-template-columns:1fr}}
+.empty{text-align:center;padding:30px;color:var(--tx3)}.empty .ei{font-size:2.5rem;margin-bottom:8px}
+.ucrd{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ucrd .ua{width:38px;height:38px;border-radius:50%;background:var(--pl);display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+.ucrd .ui{flex:1;min-width:100px}
+.ucrd .un{font-weight:600;font-size:.88rem}
+.ucrd .ue{font-size:.75rem;color:var(--tx3)}
+.tabs{display:flex;gap:3px;background:var(--bg3);border-radius:8px;padding:3px;margin-bottom:14px;overflow-x:auto}
+.tbtn{padding:7px 14px;border-radius:6px;font-weight:600;font-size:.82rem;white-space:nowrap;background:transparent;color:var(--tx2)}
+.tbtn.on{background:var(--bg2);color:var(--pr)}
+.pban{background:#fff3cd;border:1px solid #ffc107;border-radius:var(--rs);padding:10px;margin-bottom:14px;font-size:.85rem;color:#856404}
+.dark .pban{background:#3d2e00;color:#ffc107}
+</style>
+</head>
+<body>
+<div class="tc" id="TC"></div>
+
+<!-- LANDING -->
+<div class="scr on" id="landing">
+<nav class="lnav"><div class="logo">🌸 Petal Rush</div><div style="display:flex;gap:8px;align-items:center"><div class="dt" onclick="tDark()"></div><button class="btn btn-o btn-s" onclick="go('auth');aTab('login')">Login</button><button class="btn btn-p btn-s" onclick="go('auth');aTab('reg')">Get Started</button></div></nav>
+<div class="hero"><div style="font-size:3.5rem;margin-bottom:12px">🌷🌹🌻🌺</div><h1>Order Flowers <span>Like Never Before</span></h1><p>Fresh, fast, and beautiful — your multi-vendor flower marketplace.</p><button class="btn btn-p" onclick="go('auth');aTab('reg')">Start Shopping 🛒</button></div>
+<div class="feat">
+<div class="fcard"><div class="ic">🛒</div><h4>Easy Shopping</h4><p style="font-size:.82rem;color:var(--tx2)">Browse & add to cart</p></div>
+<div class="fcard"><div class="ic">📦</div><h4>Live Tracking</h4><p style="font-size:.82rem;color:var(--tx2)">Track every step</p></div>
+<div class="fcard"><div class="ic">🔐</div><h4>Secure Delivery</h4><p style="font-size:.82rem;color:var(--tx2)">Code-verified handoff</p></div>
+<div class="fcard"><div class="ic">💰</div><h4>Fair Splits</h4><p style="font-size:.82rem;color:var(--tx2)">85/10/5 transparent</p></div>
+</div>
+<div class="rgrid">
+<div class="rcard" onclick="go('auth');aTab('reg');sRole('buyer')"><div style="font-size:2rem">🛒</div><h3>Buyer</h3><p style="font-size:.8rem;color:var(--tx2)">Shop flowers</p></div>
+<div class="rcard" onclick="go('auth');aTab('reg');sRole('seller')"><div style="font-size:2rem">🏪</div><h3>Seller</h3><p style="font-size:.8rem;color:var(--tx2)">List flowers</p></div>
+<div class="rcard" onclick="go('auth');aTab('reg');sRole('delivery')"><div style="font-size:2rem">🚴</div><h3>Delivery</h3><p style="font-size:.8rem;color:var(--tx2)">Deliver orders</p></div>
+<div class="rcard" onclick="go('auth');aTab('login')"><div style="font-size:2rem">👑</div><h3>Admin</h3><p style="font-size:.8rem;color:var(--tx2)">Manage platform</p></div>
+</div>
+<div class="footer">© 2026 Petal Rush 🌸 — Fresh · Fast · Beautiful<br><small>Powered by Supabase + GitHub</small></div>
+</div>
+
+<!-- AUTH -->
+<div class="scr" id="auth">
+<div class="abox">
+<h2 style="text-align:center;margin-bottom:16px">🌸 Petal Rush</h2>
+<div class="atabs"><div class="atab on" id="tL" onclick="aTab('login')">Login</div><div class="atab" id="tR" onclick="aTab('reg')">Register</div></div>
+<div class="aerr" id="aErr"></div>
+<div id="fLogin">
+<div class="fg"><input id="lEm" type="email" placeholder="Email"></div>
+<div class="fg"><input id="lPw" type="password" placeholder="Password"></div>
+<button class="btn btn-p" style="width:100%" onclick="doLogin()">Login</button>
+</div>
+<div id="fReg" style="display:none">
+<div class="rsel" id="rSel"><div class="ropt on" data-r="buyer" onclick="sRole('buyer')">🛒 Buyer</div><div class="ropt" data-r="seller" onclick="sRole('seller')">🏪 Seller</div><div class="ropt" data-r="delivery" onclick="sRole('delivery')">🚴 Delivery</div></div>
+<div class="fg"><input id="rNm" placeholder="Full Name"></div>
+<div class="fg"><input id="rEm" type="email" placeholder="Email"></div>
+<div class="fg"><input id="rPh" placeholder="Phone"></div>
+<div class="fg"><input id="rPw" type="password" placeholder="Password (min 6)"></div>
+<button class="btn btn-p" style="width:100%" onclick="doReg()">Register</button>
+</div>
+<p style="text-align:center;margin-top:14px"><a href="#" onclick="event.preventDefault();go('landing')" style="color:var(--pr);font-size:.85rem">← Back to Home</a></p>
+<div style="margin-top:14px;padding:10px;background:var(--bg3);border-radius:var(--rs);font-size:.75rem;color:var(--tx2)"><b>Demo:</b> buyer@demo.com · seller@demo.com · delivery@demo.com · admin@demo.com<br>Password: <b>demo123</b></div>
+</div>
+</div>
+
+<!-- BUYER -->
+<div class="scr" id="buyerPanel">
+<div class="sb" id="buyerSb"><div class="sbh"><div class="logo" style="font-size:1.1rem">🌸 Petal Rush</div><div style="font-size:.72rem;color:var(--tx3)">Buyer Panel</div><div style="font-weight:600;font-size:.88rem;margin-top:4px" id="bNm">Buyer</div></div>
+<div class="ni on" onclick="sp('buyer','shop')">🛍️ Shop</div><div class="ni" onclick="sp('buyer','orders')">📦 My Orders</div><div class="ni" onclick="sp('buyer','reviews')">⭐ Reviews</div><div class="ni" onclick="sp('buyer','profile')">👤 Profile</div><div style="height:1px;background:var(--bd);margin:8px 16px"></div><div class="ni" onclick="tDark()">🌙 Dark Mode</div><div class="ni" onclick="logout()">🚪 Logout</div></div>
+<div class="sbo" onclick="csb('buyer')"></div>
+<div class="tb"><button class="tbm" onclick="tsb('buyer')">☰</button><div class="tbt" id="bTt">Shop</div><button class="btn-g" onclick="oCart()">🛒 <span id="cCnt">0</span></button><div class="dt" onclick="tDark()" style="margin-left:6px"></div></div>
+<div class="mc">
+<div class="pg on" id="buyer-shop">
+<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-s btn-p" onclick="fCat('all',this)">🌸All</button><button class="btn btn-s btn-o" onclick="fCat('roses',this)">🌹Roses</button><button class="btn btn-s btn-o" onclick="fCat('lilies',this)">🌷Lilies</button><button class="btn btn-s btn-o" onclick="fCat('bouquets',this)">💐Bouquets</button><button class="btn btn-s btn-o" onclick="fCat('seasonal',this)">🌻Seasonal</button><button class="btn btn-s btn-o" onclick="fCat('exotic',this)">🌺Exotic</button></div>
+<div class="fg"><input placeholder="Search flowers..." oninput="fProd(this.value)"></div>
+<div class="pgrid" id="pGrid"></div></div>
+<div class="pg" id="buyer-orders"><div class="sg" id="bOSt"></div><div class="fg"><select id="bOFlt" onchange="fBO()"><option value="all">All</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="packed">Packed</option><option value="shipped">Shipped</option><option value="delivered">Delivered</option></select></div><div id="bOL"></div></div>
+<div class="pg" id="buyer-reviews"><div class="cd"><div class="fg"><label style="font-size:.82rem;font-weight:600">Select Order</label><select id="rvOrd"><option value="">Choose delivered order</option></select></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Rating</label><div class="si" id="rvSt"></div></div><div class="fg"><textarea id="rvCm" rows="2" placeholder="Your review..."></textarea></div><button class="btn btn-p btn-s" onclick="subRv()">Submit Review</button></div><h3 style="margin:14px 0 8px;font-size:1rem">My Reviews</h3><div id="rvL"></div></div>
+<div class="pg" id="buyer-profile"><div style="display:flex;align-items:center;gap:14px;margin-bottom:18px"><div style="width:60px;height:60px;border-radius:50%;background:var(--pl);display:flex;align-items:center;justify-content:center;font-size:2rem;border:2px solid var(--pr)">🛒</div><div><h2 style="font-size:1.1rem" id="bPNm">Buyer</h2><p style="font-size:.82rem;color:var(--tx2)" id="bPEm">email</p></div></div><div class="cd"><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Name</label><input id="bpN"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Phone</label><input id="bpP"></div></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Address</label><textarea id="bpA" rows="2"></textarea></div><button class="btn btn-p btn-s" onclick="svBP()">Save</button></div></div>
+</div>
+<div class="co" id="cO" onclick="cCart()"></div>
+<div class="cp" id="cP"><div style="padding:14px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between"><h3>🛒 Cart (<span id="cIC">0</span>)</h3><button onclick="cCart()" style="background:none;font-size:1.2rem">✕</button></div><div style="flex:1;overflow-y:auto;padding:14px" id="cB"></div><div style="padding:14px;border-top:1px solid var(--bd)"><div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:10px"><span>Total</span><span id="cTot">₹0</span></div><button class="btn btn-p" style="width:100%" onclick="chkout()">Checkout</button></div></div>
+<div class="bn"><div class="bi on" onclick="sp('buyer','shop')"><span>🛍️</span>Shop</div><div class="bi" onclick="oCart()"><span>🛒</span>Cart</div><div class="bi" onclick="sp('buyer','orders')"><span>📦</span>Orders</div><div class="bi" onclick="sp('buyer','reviews')"><span>⭐</span>Reviews</div><div class="bi" onclick="sp('buyer','profile')"><span>👤</span>Profile</div></div>
+</div>
+
+<!-- SELLER -->
+<div class="scr" id="sellerPanel">
+<div class="sb" id="sellerSb"><div class="sbh"><div class="logo" style="font-size:1.1rem">🌸 Petal Rush</div><div style="font-size:.72rem;color:var(--tx3)">Seller Panel</div><div style="font-weight:600;font-size:.88rem;margin-top:4px" id="sNm">Seller</div></div>
+<div class="ni on" onclick="sp('seller','dash')">📊 Dashboard</div><div class="ni" onclick="sp('seller','prods')">🌹 Products</div><div class="ni" onclick="sp('seller','addp')">➕ Add Product</div><div class="ni" onclick="sp('seller','ords')">📦 Orders</div><div class="ni" onclick="sp('seller','earn')">💰 Earnings</div><div class="ni" onclick="sp('seller','sprof')">👤 Profile</div><div style="height:1px;background:var(--bd);margin:8px 16px"></div><div class="ni" onclick="tDark()">🌙 Dark Mode</div><div class="ni" onclick="logout()">🚪 Logout</div></div>
+<div class="sbo" onclick="csb('seller')"></div>
+<div class="tb"><button class="tbm" onclick="tsb('seller')">☰</button><div class="tbt" id="sTt">Dashboard</div><div class="dt" onclick="tDark()"></div></div>
+<div class="mc">
+<div class="pg on" id="seller-dash"><div class="pban" id="sPban" style="display:none">⚠️ Account pending approval</div><div class="sg" id="sSt"></div><h3 style="margin:10px 0 8px;font-size:1rem">Recent Orders</h3><div id="sRO"></div></div>
+<div class="pg" id="seller-prods"><h3 style="margin-bottom:10px">My Products</h3><div id="sPL"></div></div>
+<div class="pg" id="seller-addp"><h3 style="margin-bottom:10px" id="apTt">Add Product</h3><div class="cd"><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Name</label><input id="apN"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Category</label><select id="apC"><option value="roses">🌹 Roses</option><option value="lilies">🌷 Lilies</option><option value="bouquets">💐 Bouquets</option><option value="seasonal">🌻 Seasonal</option><option value="exotic">🌺 Exotic</option></select></div></div><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Price ₹</label><input id="apP" type="number"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Stock</label><input id="apK" type="number"></div></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Description</label><textarea id="apD" rows="2"></textarea></div><div class="fg"><label style="font-size:.82rem;font-weight:600">City</label><input id="apCt"></div><button class="btn btn-p btn-s" onclick="svProd()">Save</button> <button class="btn btn-o btn-s" onclick="clrPF()">Clear</button></div></div>
+<div class="pg" id="seller-ords"><div class="fg"><select id="sOFlt" onchange="ldSO()"><option value="all">All</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="packed">Packed</option><option value="shipped">Shipped</option><option value="delivered">Delivered</option></select></div><div id="sOL"></div></div>
+<div class="pg" id="seller-earn"><div class="ec"><div style="font-size:.85rem;opacity:.85">Total Earnings (85%)</div><div class="ev" id="sTE">₹0</div></div><div class="sg" id="sES"></div><div id="sPH"></div></div>
+<div class="pg" id="seller-sprof"><div class="cd"><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Store Name</label><input id="spSN"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Tagline</label><input id="spST"></div></div><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Name</label><input id="spN"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Phone</label><input id="spP"></div></div><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">UPI ID</label><input id="spU"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">IFSC</label><input id="spI"></div></div><button class="btn btn-p btn-s" onclick="svSP()">Save</button></div></div>
+</div>
+<div class="bn"><div class="bi on" onclick="sp('seller','dash')"><span>📊</span>Home</div><div class="bi" onclick="sp('seller','prods')"><span>🌹</span>Prod</div><div class="bi" onclick="sp('seller','ords')"><span>📦</span>Ord</div><div class="bi" onclick="sp('seller','earn')"><span>💰</span>Earn</div><div class="bi" onclick="sp('seller','sprof')"><span>👤</span>Profile</div></div>
+</div>
+
+<!-- DELIVERY -->
+<div class="scr" id="deliveryPanel">
+<div class="sb" id="deliverySb"><div class="sbh"><div class="logo" style="font-size:1.1rem">🌸 Petal Rush</div><div style="font-size:.72rem;color:var(--tx3)">Delivery Panel</div><div style="font-weight:600;font-size:.88rem;margin-top:4px" id="dNm">Driver</div></div>
+<div class="ni on" onclick="sp('delivery','ddash')">📊 Dashboard</div><div class="ni" onclick="sp('delivery','picks')">📦 Pickups</div><div class="ni" onclick="sp('delivery','actv')">🚴 Active</div><div class="ni" onclick="sp('delivery','scan')">📷 Scanner</div><div class="ni" onclick="sp('delivery','dhist')">📋 History</div><div class="ni" onclick="sp('delivery','dearn')">💰 Earnings</div><div class="ni" onclick="sp('delivery','dprof')">👤 Profile</div><div style="height:1px;background:var(--bd);margin:8px 16px"></div><div class="ni" onclick="tDark()">🌙 Dark Mode</div><div class="ni" onclick="logout()">🚪 Logout</div></div>
+<div class="sbo" onclick="csb('delivery')"></div>
+<div class="tb"><button class="tbm" onclick="tsb('delivery')">☰</button><div class="tbt" id="dTt">Dashboard</div><div class="dt" onclick="tDark()"></div></div>
+<div class="mc">
+<div class="pg on" id="delivery-ddash"><div class="sg" id="dSt"></div><h3 style="margin:10px 0 8px;font-size:1rem">Available Pickups</h3><div id="dTP"></div></div>
+<div class="pg" id="delivery-picks"><h3 style="margin-bottom:10px">Available Pickups</h3><div id="pkL"></div></div>
+<div class="pg" id="delivery-actv"><h3 style="margin-bottom:10px">Active Deliveries</h3><div id="acL"></div></div>
+<div class="pg" id="delivery-scan"><h3 style="margin-bottom:10px">Code Scanner</h3><div class="cd"><label style="font-size:.82rem;font-weight:600">7-digit Pickup Code</label><div class="fg"><input id="mPC" placeholder="1234567" maxlength="7"></div><button class="btn btn-p btn-s" onclick="lkPC()">Lookup</button></div><div class="cd"><label style="font-size:.82rem;font-weight:600">6-digit Delivery Code</label><div class="fg"><input id="mDC" placeholder="123456" maxlength="6"></div><button class="btn btn-ok btn-s" onclick="lkDC()">Verify</button></div><div id="scR"></div></div>
+<div class="pg" id="delivery-dhist"><h3 style="margin-bottom:10px">Delivery History</h3><div id="dhL"></div></div>
+<div class="pg" id="delivery-dearn"><div class="ec"><div style="font-size:.85rem;opacity:.85">Total Earnings (10%)</div><div class="ev" id="dTE">₹0</div></div><div id="deL"></div></div>
+<div class="pg" id="delivery-dprof"><div class="cd"><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Name</label><input id="dpN"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Phone</label><input id="dpP"></div></div><div class="fr"><div class="fg"><label style="font-size:.82rem;font-weight:600">Vehicle</label><input id="dpV"></div><div class="fg"><label style="font-size:.82rem;font-weight:600">Vehicle No.</label><input id="dpVN"></div></div><div class="fg"><label style="font-size:.82rem;font-weight:600">UPI</label><input id="dpU"></div><button class="btn btn-p btn-s" onclick="svDP()">Save</button></div></div>
+</div>
+<div class="bn"><div class="bi on" onclick="sp('delivery','ddash')"><span>📊</span>Home</div><div class="bi" onclick="sp('delivery','picks')"><span>📦</span>Pick</div><div class="bi" onclick="sp('delivery','actv')"><span>🚴</span>Active</div><div class="bi" onclick="sp('delivery','scan')"><span>📷</span>Scan</div><div class="bi" onclick="sp('delivery','dearn')"><span>💰</span>Earn</div></div>
+</div>
+
+<!-- ADMIN -->
+<div class="scr" id="adminPanel">
+<div class="sb" id="adminSb"><div class="sbh"><div class="logo" style="font-size:1.1rem">🌸 Petal Rush</div><div style="font-size:.72rem;color:var(--tx3)">Admin Panel</div><div style="font-weight:600;font-size:.88rem;margin-top:4px">Admin</div></div>
+<div class="ni on" onclick="sp('admin','adash')">📊 Dashboard</div><div class="ni" onclick="sp('admin','analy')">📈 Analytics</div><div class="ni" onclick="sp('admin','ausrs')">👥 Users</div><div class="ni" onclick="sp('admin','aords')">📦 Orders</div><div class="ni" onclick="sp('admin','aprds')">🌹 Products</div><div class="ni" onclick="sp('admin','apays')">💳 Payments</div><div class="ni" onclick="sp('admin','abill')">📑 Billing</div><div style="height:1px;background:var(--bd);margin:8px 16px"></div><div class="ni" onclick="tDark()">🌙 Dark Mode</div><div class="ni" onclick="logout()">🚪 Logout</div></div>
+<div class="sbo" onclick="csb('admin')"></div>
+<div class="tb"><button class="tbm" onclick="tsb('admin')">☰</button><div class="tbt" id="aTt">Dashboard</div><div class="dt" onclick="tDark()"></div></div>
+<div class="mc">
+<div class="pg on" id="admin-adash"><div class="sg" id="aDSt"></div><h3 style="margin:10px 0 8px">Recent Orders</h3><div id="aRO"></div><h3 style="margin:14px 0 8px">Pending Approvals</h3><div id="aPA"></div></div>
+<div class="pg" id="admin-analy"><h3 style="margin-bottom:10px">Analytics</h3><div class="sg" id="anSt"></div><h3 style="margin:14px 0 8px">Status Breakdown</h3><div id="anBk"></div><h3 style="margin:14px 0 8px">Top Sellers</h3><div id="anTS"></div></div>
+<div class="pg" id="admin-ausrs"><div class="tabs"><button class="tbtn on" onclick="fAU('all',this)">All</button><button class="tbtn" onclick="fAU('buyer',this)">Buyers</button><button class="tbtn" onclick="fAU('seller',this)">Sellers</button><button class="tbtn" onclick="fAU('delivery',this)">Delivery</button></div><div class="fg"><input placeholder="Search..." oninput="sAU(this.value)"></div><div id="aUL"></div></div>
+<div class="pg" id="admin-aords"><div class="fg" style="display:flex;gap:8px"><input placeholder="Search..." oninput="sAO(this.value)" style="flex:1"><select onchange="fAOS(this.value)" style="max-width:140px"><option value="all">All</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="packed">Packed</option><option value="shipped">Shipped</option><option value="delivered">Delivered</option></select></div><div id="aOL"></div></div>
+<div class="pg" id="admin-aprds"><div class="fg"><input placeholder="Search products..." oninput="sAP(this.value)"></div><div id="aPL"></div></div>
+<div class="pg" id="admin-apays"><div class="sg" id="apSt"></div><h3 style="margin:10px 0 8px">Payments</h3><div id="apTb"></div></div>
+<div class="pg" id="admin-abill"><div class="sg" id="abSt"></div><h3 style="margin:10px 0 8px">Seller Breakdown</h3><div id="abSB"></div><h3 style="margin:14px 0 8px">Delivery Breakdown</h3><div id="abDB"></div></div>
+</div>
+<div class="bn"><div class="bi on" onclick="sp('admin','adash')"><span>📊</span>Home</div><div class="bi" onclick="sp('admin','ausrs')"><span>👥</span>Users</div><div class="bi" onclick="sp('admin','aords')"><span>📦</span>Orders</div><div class="bi" onclick="sp('admin','apays')"><span>💳</span>Pay</div><div class="bi" onclick="sp('admin','abill')"><span>📑</span>Bill</div></div>
+</div>
+
+<!-- MODAL -->
+<div class="md" id="odM"><div class="mdo" onclick="cMd('odM')"></div><div class="mdc"><button class="mdx" onclick="cMd('odM')">✕</button><div id="odC"></div></div></div>
+
+<script>
+/*
+=== SUPABASE CLIENT SETUP (for real deployment) ===
+import { createClient } from '@supabase/supabase-js'
+const supabase = createClient('YOUR_SUPABASE_URL', 'YOUR_ANON_KEY')
+
+// Auth: supabase.auth.signInWithPassword({email, password})
+// Auth: supabase.auth.signUp({email, password, options:{data:{name,role}}})
+// DB:   supabase.from('products').select('*').gt('stock',0)
+// DB:   supabase.from('orders').insert({...})
+// DB:   supabase.from('orders').update({status:'packed'}).eq('id',orderId)
+*/
+
+// === IN-MEMORY DATABASE (simulates Supabase) ===
+var D={
+users:[
+{uid:'u1',name:'Priya Sharma',email:'buyer@demo.com',phone:'9876543210',role:'buyer',status:'active',addresses:[{text:'42 MG Road, Mumbai',city:'Mumbai'}],created_at:'2025-12-01'},
+{uid:'u2',name:'Raj Flowers',email:'seller@demo.com',phone:'9988776655',role:'seller',status:'active',store:{name:'Flora Paradise',tagline:'Fresh daily'},bank:{upi:'raj@upi',ifsc:'SBIN001'},created_at:'2025-10-15'},
+{uid:'u3',name:'Amit Kumar',email:'delivery@demo.com',phone:'8877665544',role:'delivery',status:'active',vehicle:{type:'Bike',number:'MH01AB1234'},bank:{upi:'amit@upi'},created_at:'2025-11-20'},
+{uid:'u4',name:'Admin',email:'admin@demo.com',phone:'7766554433',role:'admin',status:'active',bank:{upi:'petalrush@upi'},created_at:'2025-06-01'},
+{uid:'u5',name:'Sunita Blooms',email:'sunita@demo.com',phone:'9123456789',role:'seller',status:'pending',store:{name:'Sunita Garden'},created_at:'2026-01-10'},
+{uid:'u6',name:'Vikram',email:'vikram@demo.com',phone:'8765432109',role:'delivery',status:'active',vehicle:{type:'Scooter',number:'DL05CD5678'},created_at:'2026-02-01'},
+{uid:'u7',name:'Neha Patel',email:'neha@demo.com',phone:'7654321098',role:'buyer',status:'active',created_at:'2026-01-20'}
+],
+products:[
+{id:'p1',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Red Rose Bouquet',category:'roses',price:599,stock:25,emoji:'🌹',rating:4.5,city:'Mumbai'},
+{id:'p2',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'White Lily',category:'lilies',price:449,stock:18,emoji:'🌷',rating:4.2,city:'Mumbai'},
+{id:'p3',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Celebration Mix',category:'bouquets',price:899,stock:12,emoji:'💐',rating:4.8,city:'Mumbai'},
+{id:'p4',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Sunflower',category:'seasonal',price:349,stock:30,emoji:'🌻',rating:4.0,city:'Mumbai'},
+{id:'p5',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Exotic Orchid',category:'exotic',price:1299,stock:8,emoji:'🌺',rating:4.9,city:'Mumbai'},
+{id:'p6',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Pink Rose Box',category:'roses',price:799,stock:15,emoji:'🌸',rating:4.6,city:'Mumbai'},
+{id:'p7',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Jasmine Garland',category:'seasonal',price:199,stock:40,emoji:'🤍',rating:4.3,city:'Mumbai'},
+{id:'p8',seller_id:'u2',seller_name:'Raj Flowers',store_name:'Flora Paradise',name:'Tulip Set',category:'exotic',price:999,stock:6,emoji:'🌷',rating:4.7,city:'Mumbai'}
+],
+orders:[
+{id:'ORD001',user_id:'u1',user_name:'Priya Sharma',seller_id:'u2',seller_name:'Raj Flowers',delivery_partner_id:'u3',delivery_partner_name:'Amit Kumar',products:[{name:'Red Rose Bouquet',qty:2,price:599,emoji:'🌹'},{name:'White Lily',qty:1,price:449,emoji:'🌷'}],total_amount:1647,status:'delivered',payment_mode:'UPI',address:{text:'42 MG Road',city:'Mumbai'},delivery_code:'482917',pickup_code:'7381924',seller_share:1400,delivery_share:165,admin_commission:82,created_at:'2026-03-10',delivered_at:'2026-03-10'},
+{id:'ORD002',user_id:'u1',user_name:'Priya Sharma',seller_id:'u2',seller_name:'Raj Flowers',delivery_partner_id:'u3',delivery_partner_name:'Amit Kumar',products:[{name:'Celebration Mix',qty:1,price:899,emoji:'💐'}],total_amount:899,status:'shipped',payment_mode:'COD',address:{text:'42 MG Road',city:'Mumbai'},delivery_code:'593041',pickup_code:'8274615',seller_share:764,delivery_share:90,admin_commission:45,created_at:'2026-03-24'},
+{id:'ORD003',user_id:'u1',user_name:'Priya Sharma',seller_id:'u2',seller_name:'Raj Flowers',delivery_partner_id:null,delivery_partner_name:null,products:[{name:'Sunflower',qty:3,price:349,emoji:'🌻'}],total_amount:1047,status:'packed',payment_mode:'UPI',address:{text:'42 MG Road',city:'Mumbai'},delivery_code:'716382',pickup_code:'9162738',seller_share:890,delivery_share:105,admin_commission:52,created_at:'2026-03-24'},
+{id:'ORD004',user_id:'u7',user_name:'Neha Patel',seller_id:'u2',seller_name:'Raj Flowers',delivery_partner_id:null,delivery_partner_name:null,products:[{name:'Exotic Orchid',qty:1,price:1299,emoji:'🌺'}],total_amount:1299,status:'confirmed',payment_mode:'UPI',address:{text:'15 Juhu Rd',city:'Mumbai'},delivery_code:'847291',pickup_code:null,seller_share:1104,delivery_share:130,admin_commission:65,created_at:'2026-03-24'},
+{id:'ORD005',user_id:'u7',user_name:'Neha Patel',seller_id:'u2',seller_name:'Raj Flowers',delivery_partner_id:'u6',delivery_partner_name:'Vikram',products:[{name:'Pink Rose Box',qty:1,price:799,emoji:'🌸'}],total_amount:799,status:'delivered',payment_mode:'UPI',address:{text:'15 Juhu Rd',city:'Mumbai'},delivery_code:'194738',pickup_code:'3847291',seller_share:679,delivery_share:80,admin_commission:40,created_at:'2026-03-20',delivered_at:'2026-03-20'},
+{id:'ORD006',user_id:'u1',user_name:'Priya Sharma',seller_id:'u2',seller_name:'Raj Flowers',delivery_partner_id:null,delivery_partner_name:null,products:[{name:'Jasmine Garland',qty:5,price:199,emoji:'🤍'}],total_amount:995,status:'pending',payment_mode:'COD',address:{text:'42 MG Road',city:'Mumbai'},delivery_code:'561827',pickup_code:null,seller_share:846,delivery_share:100,admin_commission:49,created_at:'2026-03-24'}
+],
+payments:[
+{id:'py1',order_id:'ORD001',total_amount:1647,seller_share:1400,delivery_share:165,admin_commission:82,status:'completed',seller_id:'u2',delivery_partner_id:'u3'},
+{id:'py2',order_id:'ORD002',total_amount:899,seller_share:764,delivery_share:90,admin_commission:45,status:'pending',seller_id:'u2',delivery_partner_id:'u3'},
+{id:'py3',order_id:'ORD003',total_amount:1047,seller_share:890,delivery_share:105,admin_commission:52,status:'pending',seller_id:'u2',delivery_partner_id:null},
+{id:'py4',order_id:'ORD004',total_amount:1299,seller_share:1104,delivery_share:130,admin_commission:65,status:'pending',seller_id:'u2',delivery_partner_id:null},
+{id:'py5',order_id:'ORD005',total_amount:799,seller_share:679,delivery_share:80,admin_commission:40,status:'completed',seller_id:'u2',delivery_partner_id:'u6'},
+{id:'py6',order_id:'ORD006',total_amount:995,seller_share:846,delivery_share:100,admin_commission:49,status:'pending',seller_id:'u2',delivery_partner_id:null}
+],
+reviews:[{id:'rv1',user_id:'u1',user_name:'Priya Sharma',order_id:'ORD001',rating:5,comment:'Beautiful roses!',created_at:'2026-03-11'}]
+};
+var CU=null,cart=[],nOrd=7,nPay=7,sRat=0,curCat='all',sTxt='',aUFlt='all',aUSrch='',aOSrch='',aOStat='all',aPSrch='',editPId=null;
+
+// Utilities
+function fi(n){return '₹'+Number(n||0).toLocaleString('en-IN')}
+function cap(s){return s?s[0].toUpperCase()+s.slice(1):''}
+function gc(l){var r='';for(var i=0;i<l;i++)r+=Math.floor(Math.random()*10);return r}
+function cs(t){var s=Math.round(t*.85),d=Math.round(t*.10);return{seller_share:s,delivery_share:d,admin_commission:t-s-d}}
+function ce(c){return{roses:'🌹',lilies:'🌷',bouquets:'💐',seasonal:'🌻',exotic:'🌺'}[c]||'🌸'}
+function bd(s){var m={pending:'bg-wn',confirmed:'bg-in',packed:'bg-in',shipped:'bg-pr',delivered:'bg-ok',cancelled:'bg-er',active:'bg-ok',suspended:'bg-er',completed:'bg-ok',held:'bg-er'};return '<span class="bg '+(m[s]||'bg-in')+'">'+cap(s)+'</span>'}
+function ss(s){var st=['pending','confirmed','packed','shipped','delivered'],i=st.indexOf(s);return st.map(function(_,j){return '<div class="st '+(j<i?'dn':j===i?'cr':'')+'"></div>'}).join('')}
+function toast(m,t){var c=document.getElementById('TC'),e=document.createElement('div');e.className='toast'+(t==='error'?' err':t==='info'?' inf':'');e.textContent=m;c.appendChild(e);setTimeout(function(){e.remove()},3000)}
+
+// Navigation
+function go(id){document.querySelectorAll('.scr').forEach(function(s){s.classList.remove('on')});document.getElementById(id).classList.add('on');if(id==='buyerPanel')initB();if(id==='sellerPanel')initS();if(id==='deliveryPanel')initD();if(id==='adminPanel')initA()}
+function sp(p,pg){document.querySelectorAll('#'+p+'Panel .pg').forEach(function(x){x.classList.remove('on')});var e=document.getElementById(p+'-'+pg);if(e)e.classList.add('on');var tt={shop:'Shop',orders:'My Orders',reviews:'Reviews',profile:'Profile',dash:'Dashboard',prods:'Products',addp:'Add Product',ords:'Orders',earn:'Earnings',sprof:'Profile',ddash:'Dashboard',picks:'Pickups',actv:'Active',scan:'Scanner',dhist:'History',dearn:'Earnings',dprof:'Profile',adash:'Dashboard',analy:'Analytics',ausrs:'Users',aords:'Orders',aprds:'Products',apays:'Payments',abill:'Billing'};var t=document.getElementById(p+'Tt');if(t)t.textContent=tt[pg]||cap(pg);csb(p);
+if(p==='buyer'){if(pg==='orders')ldBO();if(pg==='reviews')ldRV()}
+if(p==='seller'){if(pg==='dash')ldSD();if(pg==='prods')ldSP();if(pg==='ords')ldSO();if(pg==='earn')ldSE()}
+if(p==='delivery'){if(pg==='ddash')ldDD();if(pg==='picks')ldPK();if(pg==='actv')ldAD();if(pg==='dhist')ldDH();if(pg==='dearn')ldDE()}
+if(p==='admin'){if(pg==='adash')ldADash();if(pg==='analy')ldAn();if(pg==='ausrs')ldAUsers();if(pg==='aords')ldAOrds();if(pg==='aprds')ldAPrds();if(pg==='apays')ldAPays();if(pg==='abill')ldABill()}}
+function tsb(p){document.getElementById(p+'Sb').classList.toggle('open')}
+function csb(p){var s=document.getElementById(p+'Sb');if(s)s.classList.remove('open')}
+function oMd(id){document.getElementById(id).classList.add('open')}
+function cMd(id){document.getElementById(id).classList.remove('open')}
+function tDark(){document.body.classList.toggle('dark')}
+
+// Auth
+function aTab(t){document.getElementById('fLogin').style.display=t==='login'?'block':'none';document.getElementById('fReg').style.display=t==='reg'?'block':'none';document.getElementById('tL').classList.toggle('on',t==='login');document.getElementById('tR').classList.toggle('on',t==='reg');document.getElementById('aErr').style.display='none'}
+var rRole='buyer';
+function sRole(r){rRole=r;document.querySelectorAll('.ropt').forEach(function(o){o.classList.toggle('on',o.getAttribute('data-r')===r)})}
+function aErr(m){var e=document.getElementById('aErr');e.textContent=m;e.style.display='block'}
+function doLogin(){var em=document.getElementById('lEm').value.trim(),pw=document.getElementById('lPw').value;if(!em||!pw)return aErr('Fill all fields');var u=D.users.find(function(x){return x.email===em});if(!u)return aErr('No account found');if(pw!=='demo123')return aErr('Wrong password (use demo123)');CU=u;toast('Welcome, '+u.name+'!');go(u.role+'Panel')}
+function doReg(){var nm=document.getElementById('rNm').value.trim(),em=document.getElementById('rEm').value.trim(),ph=document.getElementById('rPh').value.trim(),pw=document.getElementById('rPw').value;if(!nm||!em||!pw)return aErr('Fill all fields');if(pw.length<6)return aErr('Password min 6 chars');if(D.users.find(function(x){return x.email===em}))return aErr('Email exists');var u={uid:'u'+Date.now(),name:nm,email:em,phone:ph,role:rRole,status:rRole==='seller'?'pending':'active',addresses:[],created_at:new Date().toISOString().slice(0,10)};if(rRole==='seller')u.store={name:nm+"'s Store"};if(rRole==='delivery')u.vehicle={type:'',number:''};D.users.push(u);CU=u;toast('Welcome, '+nm+'!');go(rRole+'Panel')}
+function logout(){CU=null;cart=[];toast('Logged out','info');go('landing')}
+
+// === BUYER ===
+function initB(){if(!CU)return;document.getElementById('bNm').textContent=CU.name;document.getElementById('bPNm').textContent=CU.name;document.getElementById('bPEm').textContent=CU.email;document.getElementById('bpN').value=CU.name;document.getElementById('bpP').value=CU.phone||'';document.getElementById('bpA').value=CU.addresses&&CU.addresses[0]?CU.addresses[0].text:'';rProds();uCart();ldBO()}
+function rProds(){var g=document.getElementById('pGrid'),p=D.products.filter(function(x){return x.stock>0});if(curCat!=='all')p=p.filter(function(x){return x.category===curCat});if(sTxt)p=p.filter(function(x){return x.name.toLowerCase().indexOf(sTxt.toLowerCase())>=0});g.innerHTML=p.length?p.map(function(x){var st='★'.repeat(Math.floor(x.rating))+'☆'.repeat(5-Math.floor(x.rating));return '<div class="pc"><div class="pimg">'+x.emoji+'</div><div class="pb"><div class="pn">'+x.name+'</div><div style="font-size:.75rem;color:var(--tx3)">'+x.store_name+'</div><div style="font-size:.75rem;color:#f1c40f">'+st+'</div><div class="pp">'+fi(x.price)+'</div><div style="font-size:.72rem;color:var(--tx3);margin-bottom:6px">'+(x.stock<10?'<span style="color:var(--er)">Only '+x.stock+'</span>':x.stock+' in stock')+'</div><button class="btn btn-p btn-s" style="width:100%" onclick="a2c(\''+x.id+'\')">Add 🛒</button></div></div>'}).join(''):'<div class="empty"><div class="ei">🔍</div>No products</div>'}
+function fCat(c,b){curCat=c;b.parentElement.querySelectorAll('.btn').forEach(function(x){x.className='btn btn-s btn-o'});b.className='btn btn-s btn-p';rProds()}
+function fProd(q){sTxt=q;rProds()}
+function a2c(id){var p=D.products.find(function(x){return x.id===id});if(!p)return;var c=cart.find(function(x){return x.id===id});if(c)c.qty++;else cart.push({id:p.id,name:p.name,price:p.price,emoji:p.emoji,seller_id:p.seller_id,qty:1});uCart();toast(p.name+' added!')}
+function uCart(){var n=cart.reduce(function(s,c){return s+c.qty},0);document.getElementById('cCnt').textContent=n;document.getElementById('cIC').textContent=n}
+function oCart(){document.getElementById('cP').classList.add('open');document.getElementById('cO').classList.add('open');rCart()}
+function cCart(){document.getElementById('cP').classList.remove('open');document.getElementById('cO').classList.remove('open')}
+function rCart(){var b=document.getElementById('cB');if(!cart.length){b.innerHTML='<div class="empty"><div class="ei">🛒</div>Empty</div>';document.getElementById('cTot').textContent='₹0';return}b.innerHTML=cart.map(function(c,i){return '<div class="ci"><div style="font-size:1.5rem">'+c.emoji+'</div><div style="flex:1"><strong style="font-size:.85rem">'+c.name+'</strong><br><span style="color:var(--pr);font-weight:600;font-size:.85rem">'+fi(c.price)+'</span><div style="display:flex;align-items:center;gap:4px;margin-top:4px"><button onclick="cq('+i+',-1)" style="width:24px;height:24px;border-radius:50%;background:var(--bg3);border:1px solid var(--bd);font-size:.8rem">−</button><span style="font-weight:600;font-size:.85rem">'+c.qty+'</span><button onclick="cq('+i+',1)" style="width:24px;height:24px;border-radius:50%;background:var(--bg3);border:1px solid var(--bd);font-size:.8rem">+</button></div></div><button onclick="rc('+i+')" style="background:none;color:var(--er);font-size:.9rem">🗑</button></div>'}).join('');document.getElementById('cTot').textContent=fi(cart.reduce(function(s,c){return s+c.price*c.qty},0))}
+function cq(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);uCart();rCart()}
+function rc(i){cart.splice(i,1);uCart();rCart()}
+function chkout(){if(!cart.length)return toast('Cart empty','error');var t=cart.reduce(function(s,c){return s+c.price*c.qty},0),sp=cs(t),sid=cart[0].seller_id,sl=D.users.find(function(u){return u.uid===sid}),oid='ORD'+String(nOrd++).padStart(3,'0');var o={id:oid,user_id:CU.uid,user_name:CU.name,seller_id:sid,seller_name:sl?sl.name:'Seller',delivery_partner_id:null,delivery_partner_name:null,products:cart.map(function(c){return{name:c.name,qty:c.qty,price:c.price,emoji:c.emoji}}),total_amount:t,status:'pending',payment_mode:'UPI',address:CU.addresses&&CU.addresses[0]||{text:'Default',city:'Mumbai'},delivery_code:gc(6),pickup_code:null,seller_share:sp.seller_share,delivery_share:sp.delivery_share,admin_commission:sp.admin_commission,created_at:new Date().toISOString().slice(0,10)};D.orders.push(o);D.payments.push({id:'py'+nPay++,order_id:oid,total_amount:t,seller_share:sp.seller_share,delivery_share:sp.delivery_share,admin_commission:sp.admin_commission,status:'pending',seller_id:sid,delivery_partner_id:null});cart=[];uCart();cCart();toast('Order '+oid+' placed!');sp('buyer','orders')}
+function ldBO(){if(!CU)return;var o=D.orders.filter(function(x){return x.user_id===CU.uid}).sort(function(a,b){return b.created_at>a.created_at?1:-1}),st={};o.forEach(function(x){st[x.status]=(st[x.status]||0)+1});document.getElementById('bOSt').innerHTML=Object.keys(st).map(function(k){return '<div class="sc"><div class="v">'+st[k]+'</div><div class="l">'+cap(k)+'</div></div>'}).join('');fBO()}
+function fBO(){var s=document.getElementById('bOFlt').value,o=D.orders.filter(function(x){return x.user_id===(CU&&CU.uid)}).sort(function(a,b){return b.created_at>a.created_at?1:-1});if(s!=='all')o=o.filter(function(x){return x.status===s});document.getElementById('bOL').innerHTML=o.length?o.map(function(x){var dc=x.status==='shipped'?'<div class="dc"><div style="font-size:.7rem;color:var(--tx3)">Show to delivery</div><div class="code">'+x.delivery_code+'</div></div>':'';return '<div class="oc"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px"><span style="font-family:monospace;font-weight:700;font-size:.85rem">'+x.id+'</span>'+bd(x.status)+'</div><div class="prg">'+ss(x.status)+'</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin:6px 0">'+x.products.map(function(p){return '<span style="background:var(--bg3);padding:2px 8px;border-radius:50px;font-size:.72rem">'+p.emoji+' '+p.name+' ×'+p.qty+'</span>'}).join('')+'</div>'+dc+'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><strong>'+fi(x.total_amount)+'</strong><span style="font-size:.78rem;color:var(--tx3)">'+x.created_at+'</span><button class="btn btn-o btn-s" onclick="vOD(\''+x.id+'\')">Details</button></div></div>'}).join(''):'<div class="empty"><div class="ei">📦</div>No orders</div>'}
+function ldRV(){var sel=document.getElementById('rvOrd'),dl=D.orders.filter(function(o){return o.user_id===(CU&&CU.uid)&&o.status==='delivered'});sel.innerHTML='<option value="">Choose order</option>'+dl.map(function(o){return '<option value="'+o.id+'">'+o.id+'</option>'}).join('');bSI();var rv=D.reviews.filter(function(r){return r.user_id===(CU&&CU.uid)});document.getElementById('rvL').innerHTML=rv.length?rv.map(function(r){return '<div class="cd"><div style="display:flex;justify-content:space-between"><strong>'+r.order_id+'</strong><span style="color:#f1c40f">'+'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)+'</span></div><p style="font-size:.85rem;color:var(--tx2);margin-top:4px">'+r.comment+'</p></div>'}).join(''):'<div class="empty">No reviews yet</div>'}
+function bSI(){document.getElementById('rvSt').innerHTML=[1,2,3,4,5].map(function(i){return '<button onclick="sR('+i+')" class="'+(i<=sRat?'fl':'')+'">'+(i<=sRat?'★':'☆')+'</button>'}).join('')}
+function sR(v){sRat=v;bSI()}
+function subRv(){var oid=document.getElementById('rvOrd').value,cm=document.getElementById('rvCm').value.trim();if(!oid)return toast('Select order','error');if(!sRat)return toast('Select rating','error');D.reviews.push({id:'rv'+Date.now(),user_id:CU.uid,user_name:CU.name,order_id:oid,rating:sRat,comment:cm,created_at:new Date().toISOString().slice(0,10)});sRat=0;document.getElementById('rvCm').value='';toast('Review submitted ⭐');ldRV()}
+function svBP(){CU.name=document.getElementById('bpN').value.trim()||CU.name;CU.phone=document.getElementById('bpP').value.trim();var a=document.getElementById('bpA').value.trim();if(a)CU.addresses=[{text:a,city:'Mumbai'}];var u=D.users.find(function(x){return x.uid===CU.uid});if(u)Object.assign(u,CU);document.getElementById('bNm').textContent=CU.name;document.getElementById('bPNm').textContent=CU.name;toast('Saved!')}
+
+// Order Detail Modal
+function vOD(id){var o=D.orders.find(function(x){return x.id===id});if(!o)return;var h='<h3>'+o.id+'</h3><div class="prg" style="margin:10px 0">'+ss(o.status)+'</div><p>'+bd(o.status)+' · '+fi(o.total_amount)+' · '+o.payment_mode+'</p><p style="font-size:.85rem;color:var(--tx2);margin-top:6px">Buyer: '+o.user_name+'<br>Seller: '+o.seller_name+(o.delivery_partner_name?'<br>Delivery: '+o.delivery_partner_name:'')+'</p>';if(o.address)h+='<p style="font-size:.85rem;color:var(--tx2)">📍 '+o.address.text+'</p>';h+='<div class="split"><div class="spb"><div class="sv">'+fi(o.seller_share)+'</div><div class="sl">Seller 85%</div></div><div class="spb"><div class="sv">'+fi(o.delivery_share)+'</div><div class="sl">Delivery 10%</div></div><div class="spb"><div class="sv">'+fi(o.admin_commission)+'</div><div class="sl">Admin 5%</div></div></div>';h+='<div style="margin-top:8px">'+o.products.map(function(p){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.85rem"><span>'+p.emoji+' '+p.name+' ×'+p.qty+'</span><span>'+fi(p.price*p.qty)+'</span></div>'}).join('')+'</div>';if(o.delivery_code)h+='<div class="dc"><div style="font-size:.7rem;color:var(--tx3)">Delivery Code</div><div class="code">'+o.delivery_code+'</div></div>';if(o.pickup_code)h+='<div class="dc"><div style="font-size:.7rem;color:var(--tx3)">Pickup Code</div><div class="code">'+o.pickup_code+'</div></div>';document.getElementById('odC').innerHTML=h;oMd('odM')}
+
+// === SELLER ===
+function initS(){if(!CU)return;document.getElementById('sNm').textContent=CU.name;document.getElementById('sPban').style.display=CU.status==='pending'?'block':'none';if(CU.store){document.getElementById('spSN').value=CU.store.name||'';document.getElementById('spST').value=CU.store.tagline||''}document.getElementById('spN').value=CU.name;document.getElementById('spP').value=CU.phone||'';document.getElementById('spU').value=CU.bank&&CU.bank.upi||'';document.getElementById('spI').value=CU.bank&&CU.bank.ifsc||'';ldSD()}
+function ldSD(){var uid=CU&&CU.uid,pr=D.products.filter(function(p){return p.seller_id===uid}),or=D.orders.filter(function(o){return o.seller_id===uid}),dl=or.filter(function(o){return o.status==='delivered'}),pn=or.filter(function(o){return o.status==='pending'}),te=dl.reduce(function(s,o){return s+o.seller_share},0);document.getElementById('sSt').innerHTML='<div class="sc"><div style="font-size:1.5rem">🌹</div><div class="v">'+pr.length+'</div><div class="l">Products</div></div><div class="sc"><div style="font-size:1.5rem">📦</div><div class="v">'+or.length+'</div><div class="l">Orders</div></div><div class="sc"><div style="font-size:1.5rem">⏳</div><div class="v">'+pn.length+'</div><div class="l">Pending</div></div><div class="sc"><div style="font-size:1.5rem">💰</div><div class="v">'+fi(te)+'</div><div class="l">Earned</div></div>';document.getElementById('sRO').innerHTML=or.slice(-4).map(function(o){return '<div class="cd" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:monospace;font-size:.85rem">'+o.id+'</span>'+bd(o.status)+'<span>'+fi(o.total_amount)+'</span></div>'}).join('')||'<div class="empty">No orders</div>'}
+function ldSP(){var pr=D.products.filter(function(p){return p.seller_id===(CU&&CU.uid)});document.getElementById('sPL').innerHTML=pr.length?'<table><tr><th></th><th>Name</th><th>Cat</th><th>Price</th><th>Stock</th><th>Act</th></tr>'+pr.map(function(p){return '<tr><td>'+p.emoji+'</td><td>'+p.name+'</td><td>'+cap(p.category)+'</td><td>'+fi(p.price)+'</td><td>'+p.stock+'</td><td><button class="btn btn-o btn-s" onclick="edP(\''+p.id+'\')">Edit</button> <button class="btn btn-er btn-s" onclick="dlP(\''+p.id+'\')">Del</button></td></tr>'}).join('')+'</table>':'<div class="empty">No products</div>'}
+function edP(id){var p=D.products.find(function(x){return x.id===id});if(!p)return;editPId=id;document.getElementById('apTt').textContent='Edit Product';document.getElementById('apN').value=p.name;document.getElementById('apC').value=p.category;document.getElementById('apP').value=p.price;document.getElementById('apK').value=p.stock;document.getElementById('apD').value=p.description||'';document.getElementById('apCt').value=p.city||'';sp('seller','addp')}
+function dlP(id){if(!confirm('Delete?'))return;D.products=D.products.filter(function(p){return p.id!==id});ldSP();toast('Deleted')}
+function clrPF(){editPId=null;document.getElementById('apTt').textContent='Add Product';['apN','apP','apK','apD','apCt'].forEach(function(x){document.getElementById(x).value=''})}
+function svProd(){var nm=document.getElementById('apN').value.trim(),ct=document.getElementById('apC').value,pr=parseInt(document.getElementById('apP').value),sk=parseInt(document.getElementById('apK').value),ds=document.getElementById('apD').value.trim(),cy=document.getElementById('apCt').value.trim();if(!nm||!pr||!sk)return toast('Fill name/price/stock','error');if(CU.status==='pending')return toast('Account pending','error');if(editPId){var p=D.products.find(function(x){return x.id===editPId});if(p)Object.assign(p,{name:nm,category:ct,price:pr,stock:sk,description:ds,city:cy,emoji:ce(ct)});toast('Updated!');editPId=null}else{D.products.push({id:'p'+Date.now(),seller_id:CU.uid,seller_name:CU.name,store_name:CU.store&&CU.store.name||CU.name,name:nm,category:ct,price:pr,stock:sk,emoji:ce(ct),description:ds,rating:0,city:cy||'Mumbai',created_at:new Date().toISOString().slice(0,10)});toast('Added!')}clrPF();sp('seller','prods')}
+function ldSO(){var f=document.getElementById('sOFlt').value,o=D.orders.filter(function(x){return x.seller_id===(CU&&CU.uid)}).sort(function(a,b){return b.created_at>a.created_at?1:-1});if(f!=='all')o=o.filter(function(x){return x.status===f});document.getElementById('sOL').innerHTML=o.length?o.map(function(x){var b='';if(x.status==='pending')b='<button class="btn btn-ok btn-s" onclick="uSO(\''+x.id+'\',\'confirmed\')">✓ Confirm</button> ';if(x.status==='confirmed')b='<button class="btn btn-p btn-s" onclick="uSO(\''+x.id+'\',\'packed\')">📦 Pack</button> ';var pc=x.pickup_code?'<div class="dc"><div style="font-size:.7rem;color:var(--tx3)">Pickup Code</div><div class="code">'+x.pickup_code+'</div></div>':'';return '<div class="oc"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px"><span style="font-family:monospace;font-weight:700;font-size:.85rem">'+x.id+'</span>'+bd(x.status)+'</div><div class="prg">'+ss(x.status)+'</div><p style="font-size:.85rem;color:var(--tx2)">Buyer: '+x.user_name+' · '+fi(x.total_amount)+'</p>'+pc+'<div style="margin-top:8px">'+b+'<button class="btn btn-o btn-s" onclick="vOD(\''+x.id+'\')">Details</button></div></div>'}).join(''):'<div class="empty">No orders</div>'}
+function uSO(id,st){var o=D.orders.find(function(x){return x.id===id});if(!o)return;o.status=st;if(st==='confirmed')o.confirmed_at=new Date().toISOString();if(st==='packed')o.pickup_code=gc(7);toast(id+' → '+cap(st));ldSO();ldSD()}
+function ldSE(){var uid=CU&&CU.uid,o=D.orders.filter(function(x){return x.seller_id===uid}),dl=o.filter(function(x){return x.status==='delivered'}),te=dl.reduce(function(s,x){return s+x.seller_share},0),pe=o.filter(function(x){return x.status!=='delivered'&&x.status!=='cancelled'}).reduce(function(s,x){return s+x.seller_share},0);document.getElementById('sTE').textContent=fi(te);document.getElementById('sES').innerHTML='<div class="sc"><div class="v">'+fi(te)+'</div><div class="l">Received</div></div><div class="sc"><div class="v">'+fi(pe)+'</div><div class="l">Pending</div></div><div class="sc"><div class="v">'+dl.length+'</div><div class="l">Completed</div></div>';var py=D.payments.filter(function(p){return p.seller_id===uid}).slice(-6);document.getElementById('sPH').innerHTML=py.map(function(p){return '<div class="cd" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:monospace;font-size:.82rem">'+p.order_id+'</span><span>'+fi(p.seller_share)+'</span>'+bd(p.status)+'</div>'}).join('')||'<div class="empty">No history</div>'}
+function svSP(){CU.name=document.getElementById('spN').value.trim()||CU.name;CU.phone=document.getElementById('spP').value.trim();if(!CU.store)CU.store={};CU.store.name=document.getElementById('spSN').value.trim();CU.store.tagline=document.getElementById('spST').value.trim();if(!CU.bank)CU.bank={};CU.bank.upi=document.getElementById('spU').value.trim();CU.bank.ifsc=document.getElementById('spI').value.trim();var u=D.users.find(function(x){return x.uid===CU.uid});if(u)Object.assign(u,CU);document.getElementById('sNm').textContent=CU.name;toast('Saved!')}
+
+// === DELIVERY ===
+function initD(){if(!CU)return;document.getElementById('dNm').textContent=CU.name;document.getElementById('dpN').value=CU.name;document.getElementById('dpP').value=CU.phone||'';document.getElementById('dpV').value=CU.vehicle&&CU.vehicle.type||'';document.getElementById('dpVN').value=CU.vehicle&&CU.vehicle.number||'';document.getElementById('dpU').value=CU.bank&&CU.bank.upi||'';ldDD()}
+function ldDD(){var uid=CU&&CU.uid,pk=D.orders.filter(function(o){return o.status==='packed'}),ac=D.orders.filter(function(o){return o.delivery_partner_id===uid&&o.status==='shipped'}),dl=D.orders.filter(function(o){return o.delivery_partner_id===uid&&o.status==='delivered'}),er=dl.reduce(function(s,o){return s+o.delivery_share},0);document.getElementById('dSt').innerHTML='<div class="sc"><div style="font-size:1.3rem">📦</div><div class="v">'+pk.length+'</div><div class="l">Available</div></div><div class="sc"><div style="font-size:1.3rem">🚴</div><div class="v">'+ac.length+'</div><div class="l">Active</div></div><div class="sc"><div style="font-size:1.3rem">✅</div><div class="v">'+dl.length+'</div><div class="l">Done</div></div><div class="sc"><div style="font-size:1.3rem">💰</div><div class="v">'+fi(er)+'</div><div class="l">Earned</div></div>';document.getElementById('dTP').innerHTML=pk.slice(0,3).map(function(o){return '<div class="cd"><div style="display:flex;justify-content:space-between"><span style="font-family:monospace;font-weight:700;font-size:.85rem">'+o.id+'</span>'+bd('packed')+'</div><p style="font-size:.82rem;color:var(--tx2)">'+o.products.map(function(p){return p.name}).join(', ')+' · Earn: '+fi(o.delivery_share)+'</p><button class="btn btn-ok btn-s" onclick="accPk(\''+o.id+'\')" style="margin-top:6px">Accept 🚴</button></div>'}).join('')||'<div class="empty">No pickups</div>'}
+function ldPK(){var pk=D.orders.filter(function(o){return o.status==='packed'});document.getElementById('pkL').innerHTML=pk.length?pk.map(function(o){return '<div class="cd"><div style="display:flex;justify-content:space-between"><span style="font-family:monospace;font-weight:700">'+o.id+'</span><span>'+fi(o.total_amount)+'</span></div><p style="font-size:.82rem;color:var(--tx2)">Seller: '+o.seller_name+' · Pickup: <strong>'+o.pickup_code+'</strong></p><p style="font-size:.82rem;color:var(--tx2)">Earn: <strong>'+fi(o.delivery_share)+'</strong></p><div style="margin-top:6px"><button class="btn btn-ok btn-s" onclick="accPk(\''+o.id+'\')">Accept</button> <button class="btn btn-o btn-s" onclick="vOD(\''+o.id+'\')">Details</button></div></div>'}).join(''):'<div class="empty"><div class="ei">📦</div>No pickups</div>'}
+function accPk(id){var o=D.orders.find(function(x){return x.id===id});if(!o||o.status!=='packed')return toast('Not available','error');o.status='shipped';o.delivery_partner_id=CU.uid;o.delivery_partner_name=CU.name;o.accepted_at=new Date().toISOString();var p=D.payments.find(function(x){return x.order_id===id});if(p)p.delivery_partner_id=CU.uid;toast('Accepted!');ldDD();ldPK();ldAD()}
+function ldAD(){var uid=CU&&CU.uid,ac=D.orders.filter(function(o){return o.delivery_partner_id===uid&&o.status==='shipped'});document.getElementById('acL').innerHTML=ac.length?ac.map(function(o){return '<div class="cd"><div style="display:flex;justify-content:space-between"><span style="font-family:monospace;font-weight:700">'+o.id+'</span>'+bd('shipped')+'</div><p style="font-size:.88rem;margin-top:4px"><strong>To:</strong> '+o.user_name+'</p><p style="font-size:.82rem;color:var(--tx2)">'+(o.address&&o.address.text||'')+'</p><p style="font-size:.82rem;color:var(--tx2)">'+fi(o.total_amount)+' · '+o.payment_mode+'</p><div class="dc"><div style="font-size:.7rem;color:var(--tx3)">Delivery Code</div><div class="code">'+o.delivery_code+'</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ok btn-s" onclick="pDC(\''+o.id+'\',\''+o.delivery_code+'\')">✓ Confirm</button><button class="btn btn-o btn-s" onclick="vOD(\''+o.id+'\')">Details</button></div></div>'}).join(''):'<div class="empty"><div class="ei">🚴</div>No active</div>'}
+function pDC(id,exp){var c=prompt('Enter 6-digit delivery code:');if(!c)return;if(c.trim()===exp){cDel(id)}else toast('Invalid code!','error')}
+function cDel(id){var o=D.orders.find(function(x){return x.id===id});if(!o)return;o.status='delivered';o.delivered_at=new Date().toISOString();var p=D.payments.find(function(x){return x.order_id===id});if(p)p.status='completed';toast('Delivered! '+fi(o.delivery_share)+' earned 🎉');ldDD();ldAD()}
+function lkPC(){var c=document.getElementById('mPC').value.trim();if(c.length!==7)return toast('7 digits','error');var o=D.orders.find(function(x){return x.pickup_code===c&&x.status==='packed'});document.getElementById('scR').innerHTML=o?'<div class="cd"><h4>Found: '+o.id+'</h4><p>'+o.seller_name+' · '+fi(o.total_amount)+'</p><p>Earn: <strong>'+fi(o.delivery_share)+'</strong></p><button class="btn btn-ok btn-s" onclick="accPk(\''+o.id+'\')" style="margin-top:6px">Accept</button></div>':'<div class="cd" style="border-color:var(--er)">Not found</div>'}
+function lkDC(){var c=document.getElementById('mDC').value.trim();if(c.length!==6)return toast('6 digits','error');var uid=CU&&CU.uid,o=D.orders.find(function(x){return x.delivery_code===c&&x.delivery_partner_id===uid&&x.status==='shipped'});document.getElementById('scR').innerHTML=o?'<div class="cd"><h4>✅ Verified: '+o.id+'</h4><p>'+o.user_name+' · '+fi(o.total_amount)+'</p><button class="btn btn-ok btn-s" onclick="cDel(\''+o.id+'\')" style="margin-top:6px">Confirm Delivery</button></div>':'<div class="cd" style="border-color:var(--er)">No match</div>'}
+function ldDH(){var uid=CU&&CU.uid,o=D.orders.filter(function(x){return x.delivery_partner_id===uid}).sort(function(a,b){return b.created_at>a.created_at?1:-1});document.getElementById('dhL').innerHTML=o.length?o.map(function(x){return '<div class="cd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px"><span style="font-family:monospace;font-size:.85rem">'+x.id+'</span>'+bd(x.status)+'<span>'+fi(x.delivery_share)+'</span></div>'}).join(''):'<div class="empty">No history</div>'}
+function ldDE(){var uid=CU&&CU.uid,dl=D.orders.filter(function(x){return x.delivery_partner_id===uid&&x.status==='delivered'}),te=dl.reduce(function(s,x){return s+x.delivery_share},0);document.getElementById('dTE').textContent=fi(te);document.getElementById('deL').innerHTML=dl.map(function(x){return '<div class="cd" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:monospace;font-size:.85rem">'+x.id+'</span><span>'+fi(x.delivery_share)+'</span></div>'}).join('')||'<div class="empty">No earnings yet</div>'}
+function svDP(){CU.name=document.getElementById('dpN').value.trim()||CU.name;CU.phone=document.getElementById('dpP').value.trim();if(!CU.vehicle)CU.vehicle={};CU.vehicle.type=document.getElementById('dpV').value.trim();CU.vehicle.number=document.getElementById('dpVN').value.trim();if(!CU.bank)CU.bank={};CU.bank.upi=document.getElementById('dpU').value.trim();var u=D.users.find(function(x){return x.uid===CU.uid});if(u)Object.assign(u,CU);document.getElementById('dNm').textContent=CU.name;toast('Saved!')}
+
+// === ADMIN ===
+function initA(){ldADash()}
+function ldADash(){var gmv=D.orders.reduce(function(s,o){return s+o.total_amount},0),ac=D.orders.filter(function(o){return o.admin_commission}).reduce(function(s,o){return s+o.admin_commission},0),pp=D.payments.filter(function(p){return p.status==='pending'}).length;document.getElementById('aDSt').innerHTML='<div class="sc"><div class="v">'+D.users.length+'</div><div class="l">Users</div></div><div class="sc"><div class="v">'+D.orders.length+'</div><div class="l">Orders</div></div><div class="sc"><div class="v">'+fi(gmv)+'</div><div class="l">GMV</div></div><div class="sc"><div class="v">'+fi(ac)+'</div><div class="l">Commission</div></div><div class="sc"><div class="v">'+pp+'</div><div class="l">Pending Pay</div></div><div class="sc"><div class="v">'+D.products.length+'</div><div class="l">Products</div></div>';
+document.getElementById('aRO').innerHTML=D.orders.slice(-5).reverse().map(function(o){return '<div class="cd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px"><span style="font-family:monospace;font-size:.82rem">'+o.id+'</span>'+bd(o.status)+'<span>'+fi(o.total_amount)+'</span><button class="btn btn-o btn-s" onclick="vOD(\''+o.id+'\')">View</button></div>'}).join('');
+var pend=D.users.filter(function(u){return u.role==='seller'&&u.status==='pending'});document.getElementById('aPA').innerHTML=pend.length?pend.map(function(u){return '<div class="ucrd"><div class="ua">🏪</div><div class="ui"><div class="un">'+u.name+'</div><div class="ue">'+u.email+'</div></div><button class="btn btn-ok btn-s" onclick="appSl(\''+u.uid+'\')">Approve</button><button class="btn btn-er btn-s" onclick="rejSl(\''+u.uid+'\')">Reject</button></div>'}).join(''):'<div class="empty">None pending</div>'}
+function appSl(uid){var u=D.users.find(function(x){return x.uid===uid});if(u)u.status='active';toast('Approved!');ldADash();ldAUsers()}
+function rejSl(uid){var u=D.users.find(function(x){return x.uid===uid});if(u)u.status='rejected';toast('Rejected');ldADash();ldAUsers()}
+function ldAn(){var o=D.orders,dl=o.filter(function(x){return x.status==='delivered'}),gmv=o.reduce(function(s,x){return s+x.total_amount},0),ss=dl.reduce(function(s,x){return s+x.seller_share},0),ds=dl.reduce(function(s,x){return s+x.delivery_share},0),ac=dl.reduce(function(s,x){return s+x.admin_commission},0);document.getElementById('anSt').innerHTML='<div class="sc"><div class="v">'+o.length+'</div><div class="l">Orders</div></div><div class="sc"><div class="v">'+dl.length+'</div><div class="l">Delivered</div></div><div class="sc"><div class="v">'+fi(gmv)+'</div><div class="l">GMV</div></div><div class="sc"><div class="v">'+fi(ss)+'</div><div class="l">Seller(85%)</div></div><div class="sc"><div class="v">'+fi(ds)+'</div><div class="l">Delivery(10%)</div></div><div class="sc"><div class="v">'+fi(ac)+'</div><div class="l">Admin(5%)</div></div>';
+var st={};o.forEach(function(x){st[x.status]=(st[x.status]||0)+1});document.getElementById('anBk').innerHTML=Object.keys(st).map(function(k){return '<div class="cd" style="display:flex;justify-content:space-between">'+bd(k)+'<strong>'+st[k]+'</strong></div>'}).join('');
+var sl={};o.forEach(function(x){if(!sl[x.seller_name])sl[x.seller_name]=0;sl[x.seller_name]+=x.total_amount});document.getElementById('anTS').innerHTML=Object.entries(sl).sort(function(a,b){return b[1]-a[1]}).slice(0,5).map(function(e){return '<div class="cd" style="display:flex;justify-content:space-between"><span>'+e[0]+'</span><strong>'+fi(e[1])+'</strong></div>'}).join('')||'<div class="empty">No data</div>'}
+function ldAUsers(){var f=aUFlt==='all'?D.users:D.users.filter(function(u){return u.role===aUFlt});if(aUSrch)f=f.filter(function(u){return u.name.toLowerCase().indexOf(aUSrch.toLowerCase())>=0||u.email.toLowerCase().indexOf(aUSrch.toLowerCase())>=0});document.getElementById('aUL').innerHTML=f.map(function(u){var ri={buyer:'🛒',seller:'🏪',delivery:'🚴',admin:'👑'}[u.role]||'👤';var act='';if(u.role==='seller'&&u.status==='pending')act='<button class="btn btn-ok btn-s" onclick="appSl(\''+u.uid+'\')">Approve</button>';if(u.status==='active'&&u.role!=='admin')act+=' <button class="btn btn-er btn-s" onclick="suspU(\''+u.uid+'\')">Suspend</button>';if(u.status==='suspended')act='<button class="btn btn-ok btn-s" onclick="actU(\''+u.uid+'\')">Activate</button>';return '<div class="ucrd"><div class="ua">'+ri+'</div><div class="ui"><div class="un">'+u.name+'</div><div class="ue">'+u.email+' · '+u.role+'</div></div>'+bd(u.status)+'<div style="display:flex;gap:4px;flex-wrap:wrap">'+act+'</div></div>'}).join('')||'<div class="empty">No users</div>'}
+function fAU(r,b){aUFlt=r;b.parentElement.querySelectorAll('.tbtn').forEach(function(x){x.classList.remove('on')});b.classList.add('on');ldAUsers()}
+function sAU(v){aUSrch=v;ldAUsers()}
+function suspU(uid){if(!confirm('Suspend?'))return;var u=D.users.find(function(x){return x.uid===uid});if(u)u.status='suspended';toast('Suspended');ldAUsers();ldADash()}
+function actU(uid){var u=D.users.find(function(x){return x.uid===uid});if(u)u.status='active';toast('Activated');ldAUsers();ldADash()}
+function ldAOrds(){var o=D.orders.slice().reverse();if(aOStat!=='all')o=o.filter(function(x){return x.status===aOStat});if(aOSrch)o=o.filter(function(x){return x.id.toLowerCase().indexOf(aOSrch.toLowerCase())>=0||x.user_name.toLowerCase().indexOf(aOSrch.toLowerCase())>=0});document.getElementById('aOL').innerHTML=o.length?o.map(function(x){return '<div class="oc"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px"><span style="font-family:monospace;font-weight:700;font-size:.85rem">'+x.id+'</span>'+bd(x.status)+'</div><div class="prg">'+ss(x.status)+'</div><p style="font-size:.82rem;color:var(--tx2)">'+x.user_name+' → '+x.seller_name+(x.delivery_partner_name?' → '+x.delivery_partner_name:'')+'</p><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><strong>'+fi(x.total_amount)+'</strong><button class="btn btn-o btn-s" onclick="vOD(\''+x.id+'\')">Details</button></div></div>'}).join(''):'<div class="empty">No orders</div>'}
+function sAO(v){aOSrch=v;ldAOrds()}
+function fAOS(v){aOStat=v;ldAOrds()}
+function ldAPrds(){var p=D.products;if(aPSrch)p=p.filter(function(x){return x.name.toLowerCase().indexOf(aPSrch.toLowerCase())>=0});document.getElementById('aPL').innerHTML=p.length?'<table><tr><th></th><th>Name</th><th>Store</th><th>Price</th><th>Stock</th><th>Act</th></tr>'+p.map(function(x){return '<tr><td>'+x.emoji+'</td><td>'+x.name+'</td><td>'+x.store_name+'</td><td>'+fi(x.price)+'</td><td>'+x.stock+'</td><td><button class="btn btn-er btn-s" onclick="rmPrd(\''+x.id+'\')">Remove</button></td></tr>'}).join('')+'</table>':'<div class="empty">No products</div>'}
+function sAP(v){aPSrch=v;ldAPrds()}
+function rmPrd(id){if(!confirm('Remove?'))return;D.products=D.products.filter(function(x){return x.id!==id});ldAPrds();toast('Removed')}
+function ldAPays(){var py=D.payments,gmv=py.reduce(function(s,p){return s+p.total_amount},0),pn=py.filter(function(p){return p.status==='pending'}).reduce(function(s,p){return s+p.total_amount},0),cm=py.filter(function(p){return p.status==='completed'}).reduce(function(s,p){return s+p.total_amount},0),ac=py.reduce(function(s,p){return s+p.admin_commission},0);document.getElementById('apSt').innerHTML='<div class="sc"><div class="v">'+fi(gmv)+'</div><div class="l">GMV</div></div><div class="sc"><div class="v">'+fi(pn)+'</div><div class="l">Pending</div></div><div class="sc"><div class="v">'+fi(cm)+'</div><div class="l">Released</div></div><div class="sc"><div class="v">'+fi(ac)+'</div><div class="l">Commission</div></div>';
+document.getElementById('apTb').innerHTML='<table><tr><th>Order</th><th>Total</th><th>Seller</th><th>Delivery</th><th>Admin</th><th>Status</th><th>Act</th></tr>'+py.map(function(p){return '<tr><td>'+p.order_id+'</td><td>'+fi(p.total_amount)+'</td><td>'+fi(p.seller_share)+'</td><td>'+fi(p.delivery_share)+'</td><td>'+fi(p.admin_commission)+'</td><td>'+bd(p.status)+'</td><td>'+(p.status==='pending'?'<button class="btn btn-ok btn-s" onclick="relPay(\''+p.id+'\')">Release</button>':'—')+'</td></tr>'}).join('')+'</table>'}
+function relPay(id){var p=D.payments.find(function(x){return x.id===id});if(p)p.status='completed';toast('Released');ldAPays();ldADash()}
+function ldABill(){var o=D.orders,gmv=o.reduce(function(s,x){return s+x.total_amount},0),ss=o.reduce(function(s,x){return s+(x.seller_share||0)},0),ds=o.reduce(function(s,x){return s+(x.delivery_share||0)},0),ac=o.reduce(function(s,x){return s+(x.admin_commission||0)},0);document.getElementById('abSt').innerHTML='<div class="sc"><div class="v">'+fi(gmv)+'</div><div class="l">GMV</div></div><div class="sc"><div class="v">'+fi(ss)+'</div><div class="l">Sellers(85%)</div></div><div class="sc"><div class="v">'+fi(ds)+'</div><div class="l">Delivery(10%)</div></div><div class="sc"><div class="v">'+fi(ac)+'</div><div class="l">Admin(5%)</div></div>';
+var sb={};o.forEach(function(x){if(!sb[x.seller_name])sb[x.seller_name]={cnt:0,gross:0,earn:0,fee:0};sb[x.seller_name].cnt++;sb[x.seller_name].gross+=x.total_amount;sb[x.seller_name].earn+=x.seller_share||0;sb[x.seller_name].fee+=x.admin_commission||0});
+document.getElementById('abSB').innerHTML='<table><tr><th>Seller</th><th>Orders</th><th>Gross</th><th>Earn</th><th>Fee</th></tr>'+Object.entries(sb).map(function(e){return '<tr><td>'+e[0]+'</td><td>'+e[1].cnt+'</td><td>'+fi(e[1].gross)+'</td><td>'+fi(e[1].earn)+'</td><td>'+fi(e[1].fee)+'</td></tr>'}).join('')+'</table>';
+var db={};o.filter(function(x){return x.delivery_partner_name}).forEach(function(x){if(!db[x.delivery_partner_name])db[x.delivery_partner_name]={cnt:0,val:0,earn:0};db[x.delivery_partner_name].cnt++;db[x.delivery_partner_name].val+=x.total_amount;db[x.delivery_partner_name].earn+=x.delivery_share||0});
+document.getElementById('abDB').innerHTML='<table><tr><th>Partner</th><th>Deliveries</th><th>Value</th><th>Earn</th></tr>'+Object.entries(db).map(function(e){return '<tr><td>'+e[0]+'</td><td>'+e[1].cnt+'</td><td>'+fi(e[1].val)+'</td><td>'+fi(e[1].earn)+'</td></tr>'}).join('')+'</table>'}
+</script>
+</body>
+</html>

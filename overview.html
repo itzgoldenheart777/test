@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Petal Rush · Supabase Full Stack Blueprint</title>
+  <style>
+    :root {
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --ink: #1f2a37;
+      --muted: #5f6b7a;
+      --accent: #ee4c83;
+      --accent-soft: rgba(238, 76, 131, 0.15);
+      --border: #e3e8f2;
+      --shadow: 0 20px 35px rgba(15, 23, 42, 0.08);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px clamp(16px, 5vw, 40px) 64px;
+    }
+    header.hero {
+      background: var(--card);
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: var(--shadow);
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 4vw, 3rem);
+      margin: 12px 0;
+    }
+    .eyebrow {
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .hero-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+       margin-top: 12px;
+    }
+    .hero-tags span {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+    }
+    .hero-card {
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      flex: 1 1 260px;
+      min-width: 240px;
+      background: linear-gradient(135deg, #fff, #fff5f8);
+    }
+    .hero-card h3 {
+      margin-top: 0;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 16px;
+    }
+    .metric {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+    }
+    .metric strong {
+      display: block;
+      font-size: 1.2rem;
+    }
+    nav.section-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 32px 0;
+    }
+    .nav-btn {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 18px;
+      background: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--muted);
+      transition: all 0.2s ease;
+    }
+    .nav-btn.active,
+    .nav-btn:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+    }
+    section {
+      margin-bottom: 48px;
+    }
+    section h2 {
+      margin-bottom: 12px;
+      font-size: 1.8rem;
+    }
+    section p.lead {
+      color: var(--muted);
+      max-width: 720px;
+      margin-top: 0;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 18px;
+      margin-top: 20px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.04);
+    }
+    .card h3 {
+      margin-top: 0;
+    }
+    .panel-switch {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .panel-btn {
+      border: none;
+      padding: 10px 16px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .panel-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .panel-pane {
+      display: none;
+      background: #fff;
+      border-radius: 24px;
+      padding: 24px;
+      border: 1px solid var(--border);
+    }
+    .panel-pane.active {
+      display: block;
+    }
+    .panel-pane ul {
+      padding-left: 18px;
+    }
+    .panel-pane li {
+      margin-bottom: 6px;
+    }
+    .status-flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .status-step {
+      flex: 1 1 140px;
+      min-width: 120px;
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      text-align: center;
+      cursor: pointer;
+      background: #fff;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .status-step.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .status-detail {
+      background: #fff;
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      min-height: 130px;
+    }
+    .split-calculator {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 20px;
+    }
+    .split-card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      text-align: center;
+    }
+    .split-card h4 {
+      margin: 0;
+    }
+    .share-amt {
+      font-size: 1.6rem;
+      margin: 8px 0;
+      display: block;
+    }
+    .input-field {
+      background: #fff;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+      max-width: 320px;
+    }
+    .input-field input {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+    .schema-viewer {
+      background: #fff;
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 24px;
+    }
+    select {
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 1rem;
+      background: #fff;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 18px;
+      border-radius: 16px;
+      overflow: auto;
+      margin-top: 18px;
+      box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.1);
+    }
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+    .workflow-step {
+      background: #fff;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+    }
+    .workflow-step span {
+      font-size: 1.3rem;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .utility-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      padding-top: 32px;
+      font-size: 0.9rem;
+    }
+    @media (max-width: 768px) {
+      header.hero {
+        padding: 24px;
+      }
+      .panel-pane {
+        padding: 18px;
+      }
+      pre {
+        font-size: 0.85rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">GitHub · Supabase · SQL · PWA</p>
+        <h1>Petal Rush — Order Flowers Like Never Before 🌸</h1>
+        <p>
+          A multi-vendor marketplace connecting Buyers, Sellers, Delivery Partners, and Admins
+          with real-time Supabase magic, installable PWA polish, and GitHub-powered releases.
+        </p>
+        <div class="hero-tags">
+          <span>🛒 Buyer</span>
+          <span>🏪 Seller</span>
+          <span>🚴 Delivery</span>
+          <span>👑 Admin</span>
+        </div>
+      </div>
+      <div class="hero-card">
+        <h3>Realtime Delight</h3>
+        <p>Supabase PostgreSQL + Row-Level Security keep every bouquet accounted for.</p>
+        <div class="metric-grid">
+          <div class="metric">
+            <strong>⚡</strong>
+            Live order lifecycle synced across roles instantly.
+          </div>
+          <div class="metric">
+            <strong>🔐</strong>
+            Role-aware Auth with Supabase policies.
+          </div>
+          <div class="metric">
+            <strong>📦</strong>
+            QR-driven pickup & delivery confirmations.
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="section-nav">
+      <button class="nav-btn active" data-target="overview">Overview</button>
+      <button class="nav-btn" data-target="stack">Tech Stack</button>
+      <button class="nav-btn" data-target="panels">Panels</button>
+      <button class="nav-btn" data-target="lifecycle">Order Flow</button>
+      <button class="nav-btn" data-target="payments">Payment Split</button>
+      <button class="nav-btn" data-target="database">SQL Schema</button>
+      <button class="nav-btn" data-target="workflow">GitHub Workflow</button>
+      <button class="nav-btn" data-target="utilities">Shared Utilities</button>
+    </nav>
+
+    <main>
+      <section id="overview">
+        <h2>Project Overview</h2>
+        <p class="lead">
+          Petal Rush orchestrates every stem—from browsing bouquets to confirming deliveries—over a cohesive Supabase backend. Offline-friendly PWA patterns,
+          QR flows, and real-time listeners keep each role in sync (and mildly impressed).
+        </p>
+        <div class="card-grid">
+          <article class="card">
+            <h3>Realtime Marketplace</h3>
+            <p>Supabase Realtime channels stream product updates, order status escalations, and delivery assignments to every panel without manual refreshes.</p>
+          </article>
+          <article class="card">
+            <h3>PWA + Offline</h3>
+            <p>Web App Manifest + Service Worker (sw.js) cache the full multi-panel experience for quick installs, shortcuts, and resilient offline fallbacks.</p>
+          </article>
+          <article class="card">
+            <h3>QR Everywhere</h3>
+            <p>QRCode.js + jsQR close the pickup/delivery loop: 7-digit pickup codes for sellers, 6-digit delivery codes for buyers—scannable proof at each hop.</p>
+          </article>
+          <article class="card">
+            <h3>Automated Splits</h3>
+            <p>The calcSplit() helper keeps payouts fair: Seller 85 % · Delivery 10 % · Admin 5 %, with Supabase functions enforcing the math server-side.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="stack">
+        <h2>Technology Stack</h2>
+        <p class="lead">Vanilla on the outside, Supabase-powered on the inside, with GitHub guarding the gates.</p>
+        <div class="card-grid">
+          <article class="card">
+            <h3>Frontend (HTML + CSS + JS)</h3>
+            <ul>
+              <li>Role-specific pages (buyer.html → admin.html) sharing shared.css + shared.js.</li>
+              <li>Bottom navigation for mobile, split panes for desktop, dark-mode via CSS variables.</li>
+              <li>PWA install prompts, html2canvas invoice capture, Web Share API fallbacks.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Supabase Backend</h3>
+            <ul>
+              <li>Auth (email/password + OTP demo), Postgres for relational data.</li>
+              <li>Storage buckets for photos, banners, and invoice exports.</li>
+              <li>SQL functions + RLS policies map document-style data to structured tables.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>DevOps via GitHub</h3>
+            <ul>
+              <li>Monorepo with /public (HTML), /shared (CSS/JS), /supabase (SQL migrations).</li>
+              <li>GitHub Actions: lint → unit tests → Supabase migration → page deploy.</li>
+              <li>Issue templates for each panel keep feature requests tidy.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="panels">
+        <h2>Role Panels</h2>
+        <p class="lead">Four personas, one shared design system. Use the tabs to peek at each panel’s highlights.</p>
+        <div class="panel-switch">
+          <button class="panel-btn active" data-panel="buyer">🛒 Buyer</button>
+          <button class="panel-btn" data-panel="seller">🏪 Seller</button>
+          <button class="panel-btn" data-panel="delivery">🚴 Delivery</button>
+          <button class="panel-btn" data-panel="admin">👑 Admin</button>
+        </div>
+        <div id="panel-buyer" class="panel-pane active">
+          <h3>Buyer Portal</h3>
+          <ul>
+            <li><strong>Shop & Filters:</strong> loadProducts(), search, category pills, live stock badges.</li>
+            <li><strong>Cart & Checkout:</strong> localStorage cart, address selector, grouped orders per seller, QR-ready delivery codes.</li>
+            <li><strong>Tracking:</strong> stepper UI, countdown timers, track modals, invoice generator (html2canvas, print, share).</li>
+            <li><strong>Reviews & Profile:</strong> star selector, form validation, profile photos, address GPS autofill.</li>
+          </ul>
+        </div>
+        <div id="panel-seller" class="panel-pane">
+          <h3>Seller HQ</h3>
+          <ul>
+            <li><strong>Dashboard:</strong> product/order counts, revenue tiles, quick trends.</li>
+            <li><strong>Catalog Tools:</strong> image uploads, stock controls, live preview of store card, pickup GPS.</li>
+            <li><strong>Order Workflow:</strong> confirm → pack (auto 7-digit code) → QR for delivery pickup.</li>
+            <li><strong>Earnings & Banking:</strong> payout tracker, bank lock/unlock, UPI QR for admin payouts.</li>
+          </ul>
+        </div>
+        <div id="panel-delivery" class="panel-pane">
+          <h3>Delivery Wing</h3>
+          <ul>
+            <li><strong>Available Pickups:</strong> filtered packed orders with accept buttons and route links.</li>
+            <li><strong>Active Deliveries:</strong> OTP entry, QR scanning, click-to-call, navigation launches.</li>
+            <li><strong>Earnings + History:</strong> auto 10 % calculations, weekly projections, timeline of completed drops.</li>
+            <li><strong>Profile:</strong> vehicle data, documents, bank info with QR preview, emergency contact fields.</li>
+          </ul>
+        </div>
+        <div id="panel-admin" class="panel-pane">
+          <h3>Admin Command</h3>
+          <ul>
+            <li><strong>Dashboard & Analytics:</strong> GMV, commission, activity feed, seller approvals.</li>
+            <li><strong>Users & Products:</strong> search, filters, status toggles, bank detail reveal with re-auth.</li>
+            <li><strong>Orders & Payments:</strong> 5-step progress bars, hold/release buttons, payout modals with upi:// payloads.</li>
+            <li><strong>Billing & Reports:</strong> per-role breakdowns, CSV-ready tables, platform health snapshots.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="lifecycle">
+        <h2>Order Lifecycle</h2>
+        <p class="lead">Six status hops keep everyone aligned. Tap a stage to see who’s doing what.</p>
+        <div class="status-flow">
+          <button class="status-step active" data-status="pending">Pending</button>
+          <button class="status-step" data-status="confirmed">Confirmed</button>
+          <button class="status-step" data-status="packed">Packed</button>
+          <button class="status-step" data-status="shipped">Shipped</button>
+          <button class="status-step" data-status="delivered">Delivered</button>
+          <button class="status-step" data-status="cancelled">Cancelled</button>
+        </div>
+        <div class="status-detail" id="statusDetail">
+          Buyer checkout groups items per seller, creates Supabase rows in orders + payments, assigns 6-digit delivery code, and pings sellers in real time.
+        </div>
+      </section>
+
+      <section id="payments">
+        <h2>Payment Split Calculator</h2>
+        <p class="lead">calcSplit() keeps payouts predictable. Adjust the order value to see the exact share each role receives.</p>
+        <div class="input-field">
+          <label for="orderValue">Order Value (₹)</label>
+          <input type="number" id="orderValue" value="2500" min="0" />
+        </div>
+        <div class="split-calculator">
+          <div class="split-card" data-role="seller">
+            <h4>🏪 Seller · 85%</h4>
+            <span class="share-amt" id="sellerShare">₹2,125</span>
+            <p>Released after delivery, shown under Seller Earnings.</p>
+          </div>
+          <div class="split-card" data-role="delivery">
+            <h4>🚴 Delivery · 10%</h4>
+            <span class="share-amt" id="deliveryShare">₹250</span>
+            <p>Auto-tallied in Earnings & History panels.</p>
+          </div>
+          <div class="split-card" data-role="admin">
+            <h4>👑 Admin · 5%</h4>
+            <span class="share-amt" id="adminShare">₹125</span>
+            <p>Shows up in Analytics → GMV & platform fee widget.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="database">
+        <h2>Supabase SQL Schema</h2>
+        <p class="lead">Structured tables replace the original document model. Pick a table to view its DDL snippet.</p>
+        <div class="schema-viewer">
+          <label for="schemaSelect"><strong>Table</strong></label>
+          <select id="schemaSelect">
+            <option value="users">users</option>
+            <option value="products">products</option>
+            <option value="orders">orders</option>
+            <option value="payments">payments</option>
+            <option value="reviews">reviews</option>
+          </select>
+          <pre><code id="schemaCode"></code></pre>
+        </div>
+      </section>
+
+      <section id="workflow">
+        <h2>GitHub ➜ Supabase Workflow</h2>
+        <p class="lead">Because even flowers deserve CI/CD.</p>
+        <div class="workflow">
+          <div class="workflow-step">
+            <span>📝 Plan</span>
+            Ticket templates per panel keep specs aligned with the documentation above.
+          </div>
+          <div class="workflow-step">
+            <span>💻 Commit</span>
+            Feature branches update HTML, shared CSS/JS, and /supabase migrations together.
+          </div>
+          <div class="workflow-step">
+            <span>🤖 CI</span>
+            GitHub Actions lint JS, run Playwright smoke tests, and apply Supabase SQL via CLI.
+          </div>
+          <div class="workflow-step">
+            <span>🚀 Deploy</span>
+            Successful pipelines upload static assets to GitHub Pages and sync Supabase edge functions.
+          </div>
+          <div class="workflow-step">
+            <span>📊 Observe</span>
+            Admin panel analytics + Supabase logs ensure each release smells as fresh as the roses.
+          </div>
+        </div>
+      </section>
+
+      <section id="utilities">
+        <h2>Shared Utilities & PWA Extras</h2>
+        <p class="lead">Reusable helpers keep the multi-panel UX coherent (and your future self thankful).</p>
+        <div class="utility-grid">
+          <article class="card">
+            <h3>shared.js</h3>
+            <ul>
+              <li><strong>showPage</strong> toggles role pages + hooks.</li>
+              <li><strong>showToast</strong> uniform notifications.</li>
+              <li><strong>renderQR</strong> wrapper over QRCode.js.</li>
+              <li><strong>uploadFile</strong> to Supabase storage buckets.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>firebase-config.js ❤️ supabase-config.js</h3>
+            <ul>
+              <li>initSupabase() + session restore.</li>
+              <li>calcSplit(), redirectByRole(), requireRole().</li>
+              <li>Dark-mode toggles stored in localStorage.</li>
+              <li>Sidebar + tab initializers across every panel.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>PWA Layer</h3>
+            <ul>
+              <li><strong>manifest.json:</strong> icons, shortcuts (Shop / Orders).</li>
+              <li><strong>sw.js:</strong> cache-first for HTML/CSS/JS, fallback to index.html.</li>
+              <li><strong>Offline:</strong> queue writes, replay when Supabase reconnects.</li>
+              <li><strong>Install badges:</strong> triggered on role dashboards.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      © 2026 Petal Rush · Built with HTML, CSS, JS, SQL, Supabase, and a dash of GitHub sparkle.
+    </footer>
+  </div>
+
+  <script>
+    // Section navigation
+    const sectionBtns = document.querySelectorAll('.nav-btn');
+    sectionBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        sectionBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = document.getElementById(btn.dataset.target);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    // Panel switcher
+    const panelBtns = document.querySelectorAll('.panel-btn');
+    const panelPanes = document.querySelectorAll('.panel-pane');
+    panelBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        panelBtns.forEach(b => b.classList.remove('active'));
+        panelPanes.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`panel-${btn.dataset.panel}`).classList.add('active');
+      });
+    });
+
+    // Order status detail
+    const statusInfo = {
+      pending: 'Buyer checkout groups items per seller, creates Supabase rows in orders + payments, assigns 6-digit delivery code, and pings sellers in real time.',
+      confirmed: 'Seller acknowledges the order, locking inventory and stamping confirmed_at so buyers see progress + ETA recalculations.',
+      packed: 'Seller finishes prep, auto-generates a 7-digit pickup code, prints QR for delivery, and exposes pickup GPS + package details.',
+      shipped: 'Delivery partner accepts (via list, manual code, or QR). Order ties to deliveryPartnerId, shipping timer starts, buyer QR becomes scannable.',
+      delivered: 'Partner enters/scans 6-digit delivery code at doorstep. Order + payment rows mark delivered/completed, payouts move to ready state.',
+      cancelled: 'Order flagged, stock re-added, buyer notified. Payments switch to cancelled/held so admin can audit before refunds.'
+    };
+    const statusButtons = document.querySelectorAll('.status-step');
+    const statusDetail = document.getElementById('statusDetail');
+    statusButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        statusButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const key = btn.dataset.status;
+        statusDetail.textContent = statusInfo[key];
+      });
+    });
+
+    // Payment split calculator
+    const amountInput = document.getElementById('orderValue');
+    const sellerEl = document.getElementById('sellerShare');
+    const deliveryEl = document.getElementById('deliveryShare');
+    const adminEl = document.getElementById('adminShare');
+    const fmtINR = value =>
+      `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(value))}`;
+    function updateSplit() {
+      const amount = Math.max(0, Number(amountInput.value) || 0);
+      sellerEl.textContent = fmtINR(amount * 0.85);
+      deliveryEl.textContent = fmtINR(amount * 0.10);
+      adminEl.textContent = fmtINR(amount * 0.05);
+    }
+    amountInput.addEventListener('input', updateSplit);
+    updateSplit();
+
+    // Schema viewer
+    const schemas = {
+      users: `create table if not exists public.users (
+  uid uuid primary key,
+  name text not null,
+  email text unique not null,
+  phone text,
+  role text check (role in ('buyer','seller','delivery','admin')) default 'buyer',
+  status text default 'pending',
+  addresses jsonb default '[]'::jsonb,
+  bank jsonb,
+  vehicle jsonb,
+  store jsonb,
+  photo_url text,
+  created_at timestamptz default now()
+);`,
+      products: `create table if not exists public.products (
+  id uuid primary key default gen_random_uuid(),
+  seller_id uuid references public.users(uid),
+  name text not null,
+  category text not null,
+  price numeric(10,2) not null,
+  stock integer default 0,
+  images text[] default '{}',
+  description text,
+  pickup jsonb,
+  rating numeric(3,2) default 0,
+  created_at timestamptz default now()
+);`,
+      orders: `create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.users(uid),
+  seller_id uuid references public.users(uid),
+  delivery_partner_id uuid references public.users(uid),
+  products jsonb not null,
+  total_amount numeric(10,2) not null,
+  status text check (status in ('pending','confirmed','packed','shipped','delivered','cancelled')) default 'pending',
+  payment_mode text default 'upi',
+  address jsonb,
+  delivery_code char(6),
+  pickup_code char(7),
+  seller_share numeric(10,2),
+  delivery_share numeric(10,2),
+  admin_commission numeric(10,2),
+  estimated_delivery timestamptz,
+  created_at timestamptz default now()
+);`,
+      payments: `create table if not exists public.payments (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid references public.orders(id) on delete cascade,
+  seller_share numeric(10,2),
+  delivery_share numeric(10,2),
+  admin_commission numeric(10,2),
+  total_amount numeric(10,2),
+  status text check (status in ('pending','completed','held')) default 'pending',
+  released_at timestamptz,
+  released_by uuid references public.users(uid)
+);`,
+      reviews: `create table if not exists public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid references public.orders(id) on delete cascade,
+  user_id uuid references public.users(uid),
+  user_name text,
+  rating int check (rating between 1 and 5),
+  comment text,
+  created_at timestamptz default now()
+);`
+    };
+    const schemaSelect = document.getElementById('schemaSelect');
+    const schemaCode = document.getElementById('schemaCode');
+    function renderSchema() {
+      const key = schemaSelect.value;
+      schemaCode.textContent = schemas[key] || '';
+    }
+    schemaSelect.addEventListener('change', renderSchema);
+    renderSchema();
+  </script>
+</body>
+</html>
