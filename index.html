@@ -17,12 +17,12 @@ body {
 
 /* HEADER */
 header {
-    padding: 40px 20px 20px;
+    padding: 30px 20px 10px;
 }
 
-h1 {
-    font-size: 2.5rem;
-    color: #e84393;
+.logo {
+    width: 260px;
+    max-width: 90%;
     margin-bottom: 10px;
 }
 
@@ -112,10 +112,12 @@ h1 {
 <body>
 
 <header>
-    <h1>🌸 Petal Rush</h1>
+    <!-- LOGO HERE -->
+    <img src="logo.png" alt="Petal Rush Logo" class="logo">
+
     <p class="subtitle">
-        A Smart Multi-Vendor Flower Marketplace <br>
-        Built using HTML, CSS, JavaScript & Supabase
+        Order Flowers Like Never Before 🌸 <br>
+        Multi-Vendor Flower Marketplace System
     </p>
 </header>
 
@@ -126,8 +128,7 @@ h1 {
         <div class="icon">🛒</div>
         <h3>Main Application</h3>
         <p>
-            Complete working system including Buyer, Seller, Delivery & Admin panels.
-            This is the core UI of the project.
+            Complete system with Buyer, Seller, Delivery and Admin panels.
         </p>
     </div>
 
@@ -135,39 +136,37 @@ h1 {
         <div class="icon">📊</div>
         <h3>Project Overview</h3>
         <p>
-            Detailed explanation of system architecture, workflow, database design,
-            and overall project structure.
+            View system design, workflow, database structure and architecture.
         </p>
     </div>
 
     <div class="card" onclick="openPage('test01.html')">
         <div class="icon">⚡</div>
-        <h3>Live Database Version</h3>
+        <h3>Live Database</h3>
         <p>
-            Integrated with Supabase for real-time data handling,
-            authentication, and order tracking system.
+            Supabase integrated version with real-time data and authentication.
         </p>
     </div>
 
 </div>
 
-<!-- FEATURES SECTION -->
+<!-- FEATURES -->
 <div class="features">
     <h2>✨ Key Features</h2>
 
     <div class="feature-box">
-        <div class="feature">🛍️ Multi-role system (Buyer, Seller, Delivery, Admin)</div>
-        <div class="feature">📦 Real-time order tracking</div>
-        <div class="feature">🔐 Secure authentication</div>
-        <div class="feature">💰 Automated payment split (85/10/5)</div>
-        <div class="feature">🌐 Supabase backend integration</div>
-        <div class="feature">📱 Mobile-friendly design</div>
+        <div class="feature">🛍️ Multi-role system</div>
+        <div class="feature">📦 Live order tracking</div>
+        <div class="feature">🔐 Secure login</div>
+        <div class="feature">💰 Smart payment split</div>
+        <div class="feature">🌐 Supabase backend</div>
+        <div class="feature">📱 Mobile friendly</div>
     </div>
 </div>
 
 <!-- FOOTER -->
 <div class="footer">
-    © 2026 Petal Rush Project | Developed for Final Year Data Science Project
+    © 2026 Petal Rush | Final Year Project
 </div>
 
 <script>
